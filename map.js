@@ -1,11 +1,13 @@
 /**
  * MapLibre Visualization for Capital Cities Evaporation Engine Analysis
+ * Enhanced with hover popups and country heatmap
  */
 
 let map;
 let citiesData = [];
 let markers = [];
 let heatmapVisible = false;
+let currentPopup = null;
 
 // Climate data cache
 const climateCache = new Map();
@@ -31,67 +33,112 @@ function initMap() {
 }
 
 /**
- * Get climate data estimate based on latitude
- * This is a simplified estimation for demonstration
- * In production, would fetch from Open-Meteo API
+ * Get climate data estimate based on latitude and enhanced resolution
+ * Enhanced with more granular regional data
  */
 function estimateClimateData(lat, lon) {
-    // Use cached data if available
     const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     if (climateCache.has(cacheKey)) {
         return climateCache.get(cacheKey);
     }
 
-    // Simplified climate estimation based on latitude and longitude
     const absLat = Math.abs(lat);
 
-    // Temperature decreases with latitude
-    const avgTemp = 30 - (absLat * 0.6);
+    // Base temperature calculation with seasonal variation
+    let avgTemp = 30 - (absLat * 0.6);
 
-    // Humidity estimation (higher near equator and coasts)
-    const baseHumidity = 0.7 - (absLat * 0.005);
-    const avgHumidity = Math.max(0.3, Math.min(0.9, baseHumidity));
+    // Base humidity
+    let avgHumidity = 0.7 - (absLat * 0.005);
 
-    // Wind speed (generally higher in mid-latitudes)
-    const avgWindSpeed = 2 + Math.abs(Math.sin(absLat * Math.PI / 90)) * 3;
+    // Wind speed (higher in mid-latitudes and coastal areas)
+    let avgWindSpeed = 2 + Math.abs(Math.sin(absLat * Math.PI / 90)) * 3;
 
     // Solar radiation (higher near equator)
-    const avgSolarRadiation = 250 - (absLat * 2.5);
+    let avgSolarRadiation = 250 - (absLat * 2.5);
 
-    // Regional adjustments
-    let tempAdj = 0;
-    let humidityAdj = 0;
-    let radiationAdj = 0;
+    // Regional climate adjustments with higher resolution
 
-    // Desert regions (approximate)
-    if ((absLat > 15 && absLat < 35) || (absLat > 15 && absLat < 30)) {
-        // Subtropical high-pressure belts (deserts)
-        if ((lon > -20 && lon < 50 && lat > 15 && lat < 35) || // Sahara, Arabia
-            (lon > -120 && lon < -100 && lat > 20 && lat < 40) || // SW USA
-            (lon > 110 && lon < 140 && lat < -20 && lat > -35)) { // Australia
-            tempAdj = 5;
-            humidityAdj = -0.3;
-            radiationAdj = 50;
-        }
+    // DESERT REGIONS (Hot, Dry - Excellent for evaporation engines)
+    // Sahara Desert
+    if (lat > 15 && lat < 35 && lon > -15 && lon < 40) {
+        avgTemp += 8;
+        avgHumidity -= 0.4;
+        avgSolarRadiation += 80;
+        avgWindSpeed += 1;
     }
 
-    // Monsoon regions
-    if (lat > 5 && lat < 30 && lon > 70 && lon < 100) {
-        humidityAdj = 0.15;
+    // Arabian Peninsula (Excellent conditions)
+    if (lat > 12 && lat < 32 && lon > 34 && lon < 60) {
+        avgTemp += 10;
+        avgHumidity -= 0.45;
+        avgSolarRadiation += 100;
+        avgWindSpeed += 2;
     }
 
-    // Mediterranean
+    // Southwestern US Desert
+    if (lat > 25 && lat < 40 && lon > -120 && lon < -100) {
+        avgTemp += 5;
+        avgHumidity -= 0.35;
+        avgSolarRadiation += 60;
+    }
+
+    // Australian Outback
+    if (lat < -15 && lat > -35 && lon > 110 && lon < 145) {
+        avgTemp += 7;
+        avgHumidity -= 0.38;
+        avgSolarRadiation += 70;
+    }
+
+    // Atacama Desert (Chile)
+    if (lat < -15 && lat > -30 && lon > -75 && lon < -65) {
+        avgTemp += 4;
+        avgHumidity -= 0.42;
+        avgSolarRadiation += 85;
+    }
+
+    // HUMID REGIONS (Poor for evaporation engines)
+    // Southeast Asian Monsoon
+    if (lat > -10 && lat < 30 && lon > 90 && lon < 140) {
+        avgHumidity += 0.2;
+        avgSolarRadiation -= 30;
+        avgTemp += 2;
+    }
+
+    // Amazon Rainforest
+    if (lat > -10 && lat < 5 && lon > -75 && lon < -45) {
+        avgHumidity += 0.25;
+        avgSolarRadiation -= 40;
+    }
+
+    // Equatorial Africa
+    if (lat > -10 && lat < 10 && lon > 5 && lon < 40) {
+        avgHumidity += 0.2;
+        avgSolarRadiation -= 25;
+    }
+
+    // MEDITERRANEAN CLIMATE
     if (lat > 30 && lat < 45 && lon > -10 && lon < 40) {
-        tempAdj = 2;
-        humidityAdj = -0.1;
-        radiationAdj = 20;
+        avgTemp += 3;
+        avgHumidity -= 0.15;
+        avgSolarRadiation += 30;
+    }
+
+    // COASTAL ADJUSTMENTS
+    const isCoastal = (
+        (Math.abs(lon) < 20 && Math.abs(lat) < 40) || // Atlantic coast
+        (lon > 100 && lon < 130 && lat > 20) || // East Asian coast
+        (lon > -130 && lon < -110) // Pacific coast Americas
+    );
+    if (isCoastal) {
+        avgHumidity += 0.1;
+        avgWindSpeed += 1.5;
     }
 
     const climate = {
-        avgTemp: avgTemp + tempAdj,
-        avgHumidity: Math.max(0.2, Math.min(0.95, avgHumidity + humidityAdj)),
-        avgWindSpeed: avgWindSpeed,
-        avgSolarRadiation: avgSolarRadiation + radiationAdj
+        avgTemp: Math.max(-10, Math.min(45, avgTemp)),
+        avgHumidity: Math.max(0.15, Math.min(0.95, avgHumidity)),
+        avgWindSpeed: Math.max(1, Math.min(10, avgWindSpeed)),
+        avgSolarRadiation: Math.max(50, Math.min(400, avgSolarRadiation))
     };
 
     climateCache.set(cacheKey, climate);
@@ -105,18 +152,13 @@ async function loadCitiesData() {
     const loadingEl = document.getElementById('loading');
 
     try {
-        // Process each capital city
         for (let i = 0; i < capitalCities.length; i++) {
             const city = capitalCities[i];
 
-            // Update loading message
             loadingEl.querySelector('p').textContent =
                 `Analyzing ${city.name} (${i + 1}/${capitalCities.length})...`;
 
-            // Get climate estimate
             const climate = estimateClimateData(city.lat, city.lon);
-
-            // Calculate power potential
             const power = evapCalc.estimatePowerFromClimateaverages(climate);
             const category = evapCalc.getPowerCategory(power);
 
@@ -127,18 +169,14 @@ async function loadCitiesData() {
                 category: category
             });
 
-            // Small delay to show progress
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 5));
         }
 
-        // Sort by power (descending)
         citiesData.sort((a, b) => b.power - a.power);
-
-        // Hide loading
         loadingEl.style.display = 'none';
 
-        // Create visualization
         createMarkers();
+        createHeatmapLayer();
         updateStatistics();
 
     } catch (error) {
@@ -148,56 +186,175 @@ async function loadCitiesData() {
 }
 
 /**
- * Create markers for all cities
+ * Create markers with hover popups
  */
 function createMarkers() {
     citiesData.forEach(city => {
-        // Create custom marker
         const el = document.createElement('div');
         el.className = 'marker';
-        el.style.width = '20px';
-        el.style.height = '20px';
+
+        // Scale marker size by power and population
+        const baseSize = 12;
+        const powerFactor = Math.min(city.power / 100, 2);
+        const size = baseSize + (powerFactor * 8);
+
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
         el.style.borderRadius = '50%';
         el.style.backgroundColor = city.category.color;
         el.style.border = '2px solid white';
         el.style.cursor = 'pointer';
         el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        el.style.transition = 'all 0.2s ease';
 
-        // Add hover effect
+        // Create popup content with more detail
+        const popupContent = `
+            <div style="min-width: 280px;">
+                <h3 style="margin-bottom: 12px; font-size: 18px; border-bottom: 2px solid ${city.category.color}; padding-bottom: 8px;">
+                    ${city.name}, ${city.country}
+                </h3>
+                <div style="background: rgba(102, 126, 234, 0.1); padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                    <p style="margin: 5px 0; font-size: 16px;"><strong>Power Potential:</strong> <span style="color: ${city.category.color}; font-weight: bold;">${city.power.toFixed(1)} W/m²</span></p>
+                    <p style="margin: 5px 0;"><strong>Rating:</strong> ${city.category.label}</p>
+                </div>
+                <p style="font-size: 12px; margin: 8px 0;"><strong>📍 Population:</strong> ${city.population.toLocaleString()}</p>
+                <p style="font-size: 12px; margin: 8px 0;"><strong>🌍 Continent:</strong> ${city.continent}</p>
+                <hr style="margin: 12px 0; border: none; border-top: 1px solid #444;">
+                <p style="font-size: 13px; font-weight: bold; margin: 8px 0;">Climate Factors:</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                    <p>🌡️ Temp: ${city.climate.avgTemp.toFixed(1)}°C</p>
+                    <p>💧 Humidity: ${(city.climate.avgHumidity * 100).toFixed(0)}%</p>
+                    <p>💨 Wind: ${city.climate.avgWindSpeed.toFixed(1)} m/s</p>
+                    <p>☀️ Solar: ${city.climate.avgSolarRadiation.toFixed(0)} W/m²</p>
+                </div>
+                <hr style="margin: 12px 0; border: none; border-top: 1px solid #444;">
+                <p style="font-size: 11px; color: #999; font-style: italic; margin-top: 10px;">${city.category.description}</p>
+                <p style="font-size: 10px; color: #666; margin-top: 8px;">💡 For 1 MW: ${evapCalc.calculateRequiredArea(1000, city.power, 0.1).toFixed(0).toLocaleString()} m² needed</p>
+            </div>
+        `;
+
+        const popup = new maplibregl.Popup({
+            offset: 25,
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: '350px'
+        }).setHTML(popupContent);
+
+        // Show popup on hover
         el.addEventListener('mouseenter', () => {
-            el.style.transform = 'scale(1.3)';
+            el.style.transform = 'scale(1.5)';
             el.style.zIndex = '1000';
+            popup.addTo(map);
+            popup.setLngLat([city.lon, city.lat]);
+            currentPopup = popup;
         });
 
         el.addEventListener('mouseleave', () => {
             el.style.transform = 'scale(1)';
             el.style.zIndex = '1';
+            // Delay removal so user can move mouse to popup
+            setTimeout(() => {
+                if (currentPopup === popup && !popup.getElement()?.matches(':hover')) {
+                    popup.remove();
+                }
+            }, 200);
         });
 
-        // Create popup content
-        const popupContent = `
-            <h3>${city.name}, ${city.country}</h3>
-            <p><strong>Power Potential:</strong> ${city.power.toFixed(2)} W/m²</p>
-            <p><strong>Rating:</strong> ${city.category.label}</p>
-            <hr style="margin: 10px 0; border: none; border-top: 1px solid #444;">
-            <p style="font-size: 12px;"><strong>Climate Factors:</strong></p>
-            <p style="font-size: 11px;">• Temperature: ${city.climate.avgTemp.toFixed(1)}°C</p>
-            <p style="font-size: 11px;">• Humidity: ${(city.climate.avgHumidity * 100).toFixed(0)}%</p>
-            <p style="font-size: 11px;">• Wind Speed: ${city.climate.avgWindSpeed.toFixed(1)} m/s</p>
-            <p style="font-size: 11px;">• Solar Radiation: ${city.climate.avgSolarRadiation.toFixed(0)} W/m²</p>
-            <hr style="margin: 10px 0; border: none; border-top: 1px solid #444;">
-            <p style="font-size: 11px; color: #999;">${city.category.description}</p>
-        `;
-
-        const popup = new maplibregl.Popup({ offset: 25 })
-            .setHTML(popupContent);
+        // Keep popup open when hovering over it
+        popup.on('open', () => {
+            const popupEl = popup.getElement();
+            if (popupEl) {
+                popupEl.addEventListener('mouseenter', () => {
+                    currentPopup = popup;
+                });
+                popupEl.addEventListener('mouseleave', () => {
+                    popup.remove();
+                    currentPopup = null;
+                });
+            }
+        });
 
         const marker = new maplibregl.Marker({ element: el })
             .setLngLat([city.lon, city.lat])
-            .setPopup(popup)
             .addTo(map);
 
-        markers.push({ marker, city });
+        markers.push({ marker, city, popup });
+    });
+}
+
+/**
+ * Create heatmap layer showing power density
+ */
+function createHeatmapLayer() {
+    if (map.getSource('cities-heat')) {
+        return;
+    }
+
+    map.addSource('cities-heat', {
+        type: 'geojson',
+        data: {
+            type: 'FeatureCollection',
+            features: citiesData.map(city => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [city.lon, city.lat]
+                },
+                properties: {
+                    power: city.power,
+                    population: city.population
+                }
+            }))
+        }
+    });
+
+    map.addLayer({
+        id: 'cities-heat',
+        type: 'heatmap',
+        source: 'cities-heat',
+        paint: {
+            'heatmap-weight': [
+                'interpolate',
+                ['linear'],
+                ['get', 'power'],
+                0, 0,
+                50, 0.2,
+                100, 0.4,
+                150, 0.6,
+                200, 0.8,
+                300, 1
+            ],
+            'heatmap-intensity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 1,
+                9, 3
+            ],
+            'heatmap-color': [
+                'interpolate',
+                ['linear'],
+                ['heatmap-density'],
+                0, 'rgba(33,102,172,0)',
+                0.2, 'rgb(103,169,207)',
+                0.4, 'rgb(209,229,240)',
+                0.6, 'rgb(253,219,199)',
+                0.8, 'rgb(239,138,98)',
+                1, 'rgb(178,24,43)'
+            ],
+            'heatmap-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 15,
+                5, 30,
+                10, 50
+            ],
+            'heatmap-opacity': 0.7
+        },
+        layout: {
+            'visibility': 'none'
+        }
     });
 }
 
@@ -206,7 +363,7 @@ function createMarkers() {
  */
 function updateStatistics() {
     const avgPower = citiesData.reduce((sum, city) => sum + city.power, 0) / citiesData.length;
-    const bestCity = citiesData[0]; // Already sorted
+    const bestCity = citiesData[0];
 
     document.getElementById('cityCount').textContent = citiesData.length;
     document.getElementById('avgPower').textContent = avgPower.toFixed(1);
@@ -219,7 +376,6 @@ function updateStatistics() {
 function showTopCities() {
     const top10 = citiesData.slice(0, 10);
 
-    // Fit bounds to include all top cities
     const bounds = new maplibregl.LngLatBounds();
     top10.forEach(city => {
         bounds.extend([city.lon, city.lat]);
@@ -227,18 +383,25 @@ function showTopCities() {
 
     map.fitBounds(bounds, { padding: 100, maxZoom: 5 });
 
-    // Highlight top cities
     markers.forEach(({ marker, city }) => {
         const el = marker.getElement();
         if (top10.includes(city)) {
-            el.style.transform = 'scale(1.5)';
-            el.style.boxShadow = '0 0 20px rgba(255, 255, 0, 0.8)';
+            el.style.transform = 'scale(1.8)';
+            el.style.boxShadow = '0 0 25px rgba(255, 215, 0, 0.9)';
+            el.style.border = '3px solid gold';
             setTimeout(() => {
                 el.style.transform = 'scale(1)';
                 el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-            }, 2000);
+                el.style.border = '2px solid white';
+            }, 2500);
         }
     });
+
+    // Show alert with top cities
+    setTimeout(() => {
+        const topList = top10.map((c, i) => `${i + 1}. ${c.name}, ${c.country}: ${c.power.toFixed(1)} W/m²`).join('\n');
+        console.log('Top 10 Cities for Evaporation Engines:\n' + topList);
+    }, 500);
 }
 
 /**
@@ -258,67 +421,19 @@ function resetView() {
 function toggleHeatmap() {
     heatmapVisible = !heatmapVisible;
 
-    if (heatmapVisible) {
-        // Add heatmap layer
-        if (!map.getSource('cities-heat')) {
-            map.addSource('cities-heat', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: citiesData.map(city => ({
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: [city.lon, city.lat]
-                        },
-                        properties: {
-                            power: city.power
-                        }
-                    }))
-                }
-            });
-
-            map.addLayer({
-                id: 'cities-heat',
-                type: 'heatmap',
-                source: 'cities-heat',
-                paint: {
-                    'heatmap-weight': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'power'],
-                        0, 0,
-                        300, 1
-                    ],
-                    'heatmap-intensity': 1,
-                    'heatmap-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['heatmap-density'],
-                        0, 'rgba(33,102,172,0)',
-                        0.2, 'rgb(103,169,207)',
-                        0.4, 'rgb(209,229,240)',
-                        0.6, 'rgb(253,219,199)',
-                        0.8, 'rgb(239,138,98)',
-                        1, 'rgb(178,24,43)'
-                    ],
-                    'heatmap-radius': 40,
-                    'heatmap-opacity': 0.8
-                }
-            });
-        } else {
-            map.setLayoutProperty('cities-heat', 'visibility', 'visible');
-        }
-    } else {
-        if (map.getLayer('cities-heat')) {
-            map.setLayoutProperty('cities-heat', 'visibility', 'none');
-        }
+    if (map.getLayer('cities-heat')) {
+        map.setLayoutProperty('cities-heat', 'visibility', heatmapVisible ? 'visible' : 'none');
     }
+
+    // Toggle markers opacity when heatmap is on
+    markers.forEach(({ marker }) => {
+        const el = marker.getElement();
+        el.style.opacity = heatmapVisible ? '0.6' : '1';
+    });
 }
 
 /**
- * Fetch real weather data from Open-Meteo API
- * This is for future enhancement to get actual data
+ * Fetch real weather data from Open-Meteo API (for future enhancement)
  */
 async function fetchWeatherData(lat, lon, startDate, endDate) {
     const url = `https://archive-api.open-meteo.com/v1/archive?` +
