@@ -54,6 +54,29 @@
             line-height: 1.6;
         }
 
+        .header-nav {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .header-nav a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .header-nav a:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
         .legend {
             position: absolute;
             bottom: 30px;
@@ -215,6 +238,10 @@
     <div class="header">
         <h1>🌍 EvapoScore: Global Evaporation Engine Feasibility</h1>
         <p>Interactive visualization of evaporation-driven engine power potential across world capital cities. Based on climate data including temperature, humidity, wind speed, and solar radiation.</p>
+        <div class="header-nav">
+            <a href="report.html">📊 Research Report</a>
+            <a href="https://github.com/aranyoray/EvapoScore" target="_blank">💻 GitHub</a>
+        </div>
     </div>
 
     <div class="controls">

@@ -235,29 +235,49 @@ function createMarkers() {
 
         const popup = new maplibregl.Popup({
             offset: 25,
-            closeButton: true,
+            closeButton: false,
             closeOnClick: false,
             maxWidth: '350px'
         }).setHTML(popupContent);
 
+        let hoverTimeout = null;
+
         // Show popup on hover
         el.addEventListener('mouseenter', () => {
+            // Clear any pending hide timeout
+            if (hoverTimeout) {
+                clearTimeout(hoverTimeout);
+                hoverTimeout = null;
+            }
+
+            // Ensure marker stays visible
+            el.style.display = 'block';
+            el.style.visibility = 'visible';
             el.style.transform = 'scale(1.5)';
             el.style.zIndex = '1000';
-            popup.addTo(map);
-            popup.setLngLat([city.lon, city.lat]);
+
+            // Show popup
+            if (!popup.isOpen()) {
+                popup.setLngLat([city.lon, city.lat]).addTo(map);
+            }
             currentPopup = popup;
         });
 
         el.addEventListener('mouseleave', () => {
+            // Reset marker size but keep it visible
             el.style.transform = 'scale(1)';
             el.style.zIndex = '1';
-            // Delay removal so user can move mouse to popup
-            setTimeout(() => {
-                if (currentPopup === popup && !popup.getElement()?.matches(':hover')) {
-                    popup.remove();
+
+            // Delay popup removal to allow moving to popup
+            hoverTimeout = setTimeout(() => {
+                if (popup.isOpen()) {
+                    const popupEl = popup.getElement();
+                    if (!popupEl || !popupEl.matches(':hover')) {
+                        popup.remove();
+                        currentPopup = null;
+                    }
                 }
-            }, 200);
+            }, 300);
         });
 
         // Keep popup open when hovering over it
@@ -265,8 +285,13 @@ function createMarkers() {
             const popupEl = popup.getElement();
             if (popupEl) {
                 popupEl.addEventListener('mouseenter', () => {
+                    if (hoverTimeout) {
+                        clearTimeout(hoverTimeout);
+                        hoverTimeout = null;
+                    }
                     currentPopup = popup;
                 });
+
                 popupEl.addEventListener('mouseleave', () => {
                     popup.remove();
                     currentPopup = null;
@@ -278,7 +303,8 @@ function createMarkers() {
             .setLngLat([city.lon, city.lat])
             .addTo(map);
 
-        markers.push({ marker, city, popup });
+        // Store references
+        markers.push({ marker, city, popup, element: el });
     });
 }
 
@@ -383,16 +409,18 @@ function showTopCities() {
 
     map.fitBounds(bounds, { padding: 100, maxZoom: 5 });
 
-    markers.forEach(({ marker, city }) => {
-        const el = marker.getElement();
-        if (top10.includes(city)) {
-            el.style.transform = 'scale(1.8)';
-            el.style.boxShadow = '0 0 25px rgba(255, 215, 0, 0.9)';
-            el.style.border = '3px solid gold';
+    markers.forEach(({ element, city }) => {
+        if (element && top10.includes(city)) {
+            // Ensure visibility
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+            element.style.transform = 'scale(1.8)';
+            element.style.boxShadow = '0 0 25px rgba(255, 215, 0, 0.9)';
+            element.style.border = '3px solid gold';
             setTimeout(() => {
-                el.style.transform = 'scale(1)';
-                el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-                el.style.border = '2px solid white';
+                element.style.transform = 'scale(1)';
+                element.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+                element.style.border = '2px solid white';
             }, 2500);
         }
     });
@@ -425,10 +453,13 @@ function toggleHeatmap() {
         map.setLayoutProperty('cities-heat', 'visibility', heatmapVisible ? 'visible' : 'none');
     }
 
-    // Toggle markers opacity when heatmap is on
-    markers.forEach(({ marker }) => {
-        const el = marker.getElement();
-        el.style.opacity = heatmapVisible ? '0.6' : '1';
+    // Toggle markers opacity when heatmap is on, but keep them visible
+    markers.forEach(({ element }) => {
+        if (element) {
+            element.style.opacity = heatmapVisible ? '0.6' : '1';
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+        }
     });
 }
 
