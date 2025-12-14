@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EvapoScore - US Counties Evaporation Engine Analysis</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🇺🇸%3C/text%3E%3C/svg%3E">
+    <title>EvaDemand - Energy Demand Analysis</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E⚡%3C/text%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css">
     <style>
         * {
@@ -30,13 +30,13 @@
             position: absolute;
             top: 20px;
             left: 20px;
-            right: 20px;
             z-index: 1;
             background: rgba(26, 26, 46, 0.95);
             padding: 20px 30px;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(10px);
+            max-width: 600px;
         }
 
         .header h1 {
@@ -54,27 +54,32 @@
             line-height: 1.6;
         }
 
-        .header-nav {
-            margin-top: 15px;
+        .controls {
+            position: absolute;
+            top: 140px;
+            left: 20px;
+            z-index: 1;
             display: flex;
-            gap: 15px;
+            flex-direction: column;
+            gap: 10px;
         }
 
-        .header-nav a {
-            color: #667eea;
-            text-decoration: none;
+        .control-btn {
+            background: rgba(26, 26, 46, 0.95);
+            border: none;
+            color: #eee;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
             font-size: 14px;
-            font-weight: 500;
-            padding: 8px 16px;
-            border: 1px solid #667eea;
-            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
             transition: all 0.3s ease;
         }
 
-        .header-nav a:hover {
+        .control-btn:hover {
             background: #667eea;
-            color: white;
             transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
 
         .legend {
@@ -120,7 +125,7 @@
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
             z-index: 1;
-            max-width: 300px;
+            max-width: 350px;
             backdrop-filter: blur(10px);
         }
 
@@ -137,12 +142,18 @@
             margin-bottom: 8px;
         }
 
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
         .loading {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(26, 26, 46, 0.95);
+            background: rgba(26, 26, 46, 0.98);
             padding: 30px 50px;
             border-radius: 12px;
             z-index: 1000;
@@ -164,134 +175,65 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .maplibregl-popup-content {
-            background: rgba(26, 26, 46, 0.98);
-            color: #eee;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-            min-width: 250px;
-        }
-
-        .maplibregl-popup-content h3 {
-            margin-bottom: 10px;
-            color: #fff;
-            font-size: 18px;
-        }
-
-        .maplibregl-popup-content p {
-            margin: 5px 0;
-            font-size: 13px;
-            color: #bbb;
-        }
-
-        .maplibregl-popup-content strong {
-            color: #667eea;
-        }
-
-        .maplibregl-popup-tip {
-            border-top-color: rgba(26, 26, 46, 0.98) !important;
-        }
-
-        .controls {
-            position: absolute;
-            top: 140px;
-            left: 20px;
-            z-index: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .control-btn {
-            background: rgba(26, 26, 46, 0.95);
-            border: none;
-            color: #eee;
-            padding: 12px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
-        }
-
-        .control-btn:hover {
-            background: #667eea;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
     </style>
 </head>
 <body>
     <div class="loading" id="loading">
         <div class="loading-spinner"></div>
-        <p>Loading US counties data...</p>
+        <p>Loading demand data...</p>
     </div>
 
     <div class="header">
-        <h1>🇺🇸 EvapoScore: US Counties Evaporation Engine Feasibility</h1>
-        <p>Interactive visualization of evaporation-driven engine power potential across US counties. Based on climate data including temperature, humidity, wind speed, and solar radiation.</p>
-        <div class="header-nav">
-            <a href="report.html">📊 Research Report</a>
-            <a href="https://github.com/aranyoray/EvapoScore" target="_blank">💻 GitHub</a>
-        </div>
+        <h1>⚡ EvaDemand: Energy Demand Analysis</h1>
+        <p>Real-time electricity demand forecasting based on population density, industrial activity, weather patterns, and historical consumption data.</p>
     </div>
 
     <div class="controls">
-        <button class="control-btn" onclick="showTopCounties()">🏆 Top 10 Locations</button>
-        <button class="control-btn" onclick="resetView()">🗺️ Reset View</button>
-        <button class="control-btn" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
-        <button class="control-btn" onclick="showAPIConfigModal()">🔑 API Keys</button>
+        <button class="control-btn" onclick="showTopDemand()">📈 Top 10 Demand</button>
         <button class="control-btn" onclick="toggleResolution()">📍 Toggle Resolution</button>
+        <button class="control-btn" onclick="toggleIndustryLayer()">🏭 Industrial Activity</button>
     </div>
 
     <div id="map"></div>
 
     <div class="legend">
-        <h3>Power Potential (W/m²)</h3>
+        <h3>Demand (MW/km²)</h3>
         <div class="legend-item">
             <div class="legend-color" style="background: #d73027;"></div>
-            <span>Excellent (&gt;200)</span>
+            <span>Very High (&gt;50)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color" style="background: #fc8d59;"></div>
-            <span>Very Good (150-200)</span>
+            <span>High (25-50)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color" style="background: #fee090;"></div>
-            <span>Good (100-150)</span>
+            <span>Medium (10-25)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color" style="background: #91bfdb;"></div>
-            <span>Moderate (50-100)</span>
+            <span>Low (5-10)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color" style="background: #4575b4;"></div>
-            <span>Low (&lt;50)</span>
+            <span>Very Low (&lt;5)</span>
         </div>
     </div>
 
     <div class="info-panel">
-        <h3>📊 US Statistics <span id="resolution-badge" style="font-size: 11px; padding: 3px 8px; background: #667eea; border-radius: 4px; margin-left: 5px;">County</span></h3>
-        <p><strong>Locations:</strong> <span class="stat-value" id="countyCount">0</span></p>
-        <p><strong>Avg Power:</strong> <span class="stat-value" id="avgPower">0</span> W/m²</p>
-        <p><strong>Best Location:</strong> <span id="bestCounty">Loading...</span></p>
-        <p><strong>Data Source:</strong> <span id="data-source" style="font-size: 11px; color: #888;">Simulated</span></p>
-        <p style="margin-top: 15px; font-size: 12px; color: #888;">Hover over any marker to view detailed analysis</p>
+        <h3>📊 Demand Statistics <span id="resolution-badge" style="font-size: 11px; padding: 3px 8px; background: #667eea; border-radius: 4px; margin-left: 5px;">County</span></h3>
+        <p><strong>Total Locations:</strong> <span class="stat-value" id="locationCount">0</span></p>
+        <p><strong>Avg Demand:</strong> <span class="stat-value" id="avgDemand">0</span> MW</p>
+        <p><strong>Peak Demand:</strong> <span id="peakDemand">Loading...</span></p>
+        <p><strong>Prediction Model:</strong> <span id="model-type" style="font-size: 11px; color: #888;">Weather-based</span></p>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="us-counties-data.js"></script>
-    <script src="evaporation-calc.js"></script>
-    <script src="api-integration.js"></script>
+    <script src="energy-capacity-data.js"></script>
+    <script src="open-meteo-api.js"></script>
     <script src="time-slider.js"></script>
-    <script src="map.js"></script>
+    <script src="shared-nav.js"></script>
+    <script src="eva-demand.js"></script>
 </body>
 </html>
