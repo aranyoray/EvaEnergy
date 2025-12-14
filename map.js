@@ -1,10 +1,10 @@
 /**
- * MapLibre Visualization for Capital Cities Evaporation Engine Analysis
- * Enhanced with hover popups and country heatmap
+ * MapLibre Visualization for US Counties Evaporation Engine Analysis
+ * Enhanced with hover popups and heatmap
  */
 
 let map;
-let citiesData = [];
+let countiesData = [];
 let markers = [];
 let heatmapVisible = false;
 let currentPopup = null;
@@ -19,13 +19,13 @@ function initMap() {
     map = new maplibregl.Map({
         container: 'map',
         style: 'https://demotiles.maplibre.org/style.json',
-        center: [20, 20],
-        zoom: 2,
+        center: [-98, 39],
+        zoom: 4,
         attributionControl: true
     });
 
     map.on('load', () => {
-        loadCitiesData();
+        loadCountiesData();
     });
 
     // Add navigation controls
@@ -146,24 +146,24 @@ function estimateClimateData(lat, lon) {
 }
 
 /**
- * Load and process cities data
+ * Load and process counties data
  */
-async function loadCitiesData() {
+async function loadCountiesData() {
     const loadingEl = document.getElementById('loading');
 
     try {
-        for (let i = 0; i < capitalCities.length; i++) {
-            const city = capitalCities[i];
+        for (let i = 0; i < usCounties.length; i++) {
+            const county = usCounties[i];
 
             loadingEl.querySelector('p').textContent =
-                `Analyzing ${city.name} (${i + 1}/${capitalCities.length})...`;
+                `Analyzing ${county.name}, ${county.state} (${i + 1}/${usCounties.length})...`;
 
-            const climate = estimateClimateData(city.lat, city.lon);
+            const climate = estimateClimateData(county.lat, county.lon);
             const power = evapCalc.estimatePowerFromClimateaverages(climate);
             const category = evapCalc.getPowerCategory(power);
 
-            citiesData.push({
-                ...city,
+            countiesData.push({
+                ...county,
                 climate: climate,
                 power: power,
                 category: category
@@ -172,7 +172,7 @@ async function loadCitiesData() {
             await new Promise(resolve => setTimeout(resolve, 5));
         }
 
-        citiesData.sort((a, b) => b.power - a.power);
+        countiesData.sort((a, b) => b.power - a.power);
         loadingEl.style.display = 'none';
 
         createMarkers();
@@ -189,19 +189,19 @@ async function loadCitiesData() {
  * Create markers with hover popups
  */
 function createMarkers() {
-    citiesData.forEach(city => {
+    countiesData.forEach(county => {
         const el = document.createElement('div');
         el.className = 'marker';
 
         // Scale marker size by power and population
         const baseSize = 12;
-        const powerFactor = Math.min(city.power / 100, 2);
+        const powerFactor = Math.min(county.power / 100, 2);
         const size = baseSize + (powerFactor * 8);
 
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
         el.style.borderRadius = '50%';
-        el.style.backgroundColor = city.category.color;
+        el.style.backgroundColor = county.category.color;
         el.style.border = '2px solid white';
         el.style.cursor = 'pointer';
         el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
@@ -210,26 +210,26 @@ function createMarkers() {
         // Create popup content with more detail
         const popupContent = `
             <div style="min-width: 280px;">
-                <h3 style="margin-bottom: 12px; font-size: 18px; border-bottom: 2px solid ${city.category.color}; padding-bottom: 8px;">
-                    ${city.name}, ${city.country}
+                <h3 style="margin-bottom: 12px; font-size: 18px; border-bottom: 2px solid ${county.category.color}; padding-bottom: 8px;">
+                    ${county.name}, ${county.state}
                 </h3>
                 <div style="background: rgba(102, 126, 234, 0.1); padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <p style="margin: 5px 0; font-size: 16px;"><strong>Power Potential:</strong> <span style="color: ${city.category.color}; font-weight: bold;">${city.power.toFixed(1)} W/m²</span></p>
-                    <p style="margin: 5px 0;"><strong>Rating:</strong> ${city.category.label}</p>
+                    <p style="margin: 5px 0; font-size: 16px;"><strong>Power Potential:</strong> <span style="color: ${county.category.color}; font-weight: bold;">${county.power.toFixed(1)} W/m²</span></p>
+                    <p style="margin: 5px 0;"><strong>Rating:</strong> ${county.category.label}</p>
                 </div>
-                <p style="font-size: 12px; margin: 8px 0;"><strong>📍 Population:</strong> ${city.population.toLocaleString()}</p>
-                <p style="font-size: 12px; margin: 8px 0;"><strong>🌍 Continent:</strong> ${city.continent}</p>
+                <p style="font-size: 12px; margin: 8px 0;"><strong>📍 Population:</strong> ${county.population.toLocaleString()}</p>
+                <p style="font-size: 12px; margin: 8px 0;"><strong>🗺️ State:</strong> ${county.state}</p>
                 <hr style="margin: 12px 0; border: none; border-top: 1px solid #444;">
                 <p style="font-size: 13px; font-weight: bold; margin: 8px 0;">Climate Factors:</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
-                    <p>🌡️ Temp: ${city.climate.avgTemp.toFixed(1)}°C</p>
-                    <p>💧 Humidity: ${(city.climate.avgHumidity * 100).toFixed(0)}%</p>
-                    <p>💨 Wind: ${city.climate.avgWindSpeed.toFixed(1)} m/s</p>
-                    <p>☀️ Solar: ${city.climate.avgSolarRadiation.toFixed(0)} W/m²</p>
+                    <p>🌡️ Temp: ${county.climate.avgTemp.toFixed(1)}°C</p>
+                    <p>💧 Humidity: ${(county.climate.avgHumidity * 100).toFixed(0)}%</p>
+                    <p>💨 Wind: ${county.climate.avgWindSpeed.toFixed(1)} m/s</p>
+                    <p>☀️ Solar: ${county.climate.avgSolarRadiation.toFixed(0)} W/m²</p>
                 </div>
                 <hr style="margin: 12px 0; border: none; border-top: 1px solid #444;">
-                <p style="font-size: 11px; color: #999; font-style: italic; margin-top: 10px;">${city.category.description}</p>
-                <p style="font-size: 10px; color: #666; margin-top: 8px;">💡 For 1 MW: ${evapCalc.calculateRequiredArea(1000, city.power, 0.1).toFixed(0).toLocaleString()} m² needed</p>
+                <p style="font-size: 11px; color: #999; font-style: italic; margin-top: 10px;">${county.category.description}</p>
+                <p style="font-size: 10px; color: #666; margin-top: 8px;">💡 For 1 MW: ${evapCalc.calculateRequiredArea(1000, county.power, 0.1).toFixed(0).toLocaleString()} m² needed</p>
             </div>
         `;
 
@@ -258,7 +258,7 @@ function createMarkers() {
 
             // Show popup
             if (!popup.isOpen()) {
-                popup.setLngLat([city.lon, city.lat]).addTo(map);
+                popup.setLngLat([county.lon, county.lat]).addTo(map);
             }
             currentPopup = popup;
         });
@@ -300,11 +300,11 @@ function createMarkers() {
         });
 
         const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([city.lon, city.lat])
+            .setLngLat([county.lon, county.lat])
             .addTo(map);
 
         // Store references
-        markers.push({ marker, city, popup, element: el });
+        markers.push({ marker, county, popup, element: el });
     });
 }
 
@@ -312,32 +312,32 @@ function createMarkers() {
  * Create heatmap layer showing power density
  */
 function createHeatmapLayer() {
-    if (map.getSource('cities-heat')) {
+    if (map.getSource('counties-heat')) {
         return;
     }
 
-    map.addSource('cities-heat', {
+    map.addSource('counties-heat', {
         type: 'geojson',
         data: {
             type: 'FeatureCollection',
-            features: citiesData.map(city => ({
+            features: countiesData.map(county => ({
                 type: 'Feature',
                 geometry: {
                     type: 'Point',
-                    coordinates: [city.lon, city.lat]
+                    coordinates: [county.lon, county.lat]
                 },
                 properties: {
-                    power: city.power,
-                    population: city.population
+                    power: county.power,
+                    population: county.population
                 }
             }))
         }
     });
 
     map.addLayer({
-        id: 'cities-heat',
+        id: 'counties-heat',
         type: 'heatmap',
-        source: 'cities-heat',
+        source: 'counties-heat',
         paint: {
             'heatmap-weight': [
                 'interpolate',
@@ -385,32 +385,32 @@ function createHeatmapLayer() {
 }
 
 /**
- * Update global statistics
+ * Update US statistics
  */
 function updateStatistics() {
-    const avgPower = citiesData.reduce((sum, city) => sum + city.power, 0) / citiesData.length;
-    const bestCity = citiesData[0];
+    const avgPower = countiesData.reduce((sum, county) => sum + county.power, 0) / countiesData.length;
+    const bestCounty = countiesData[0];
 
-    document.getElementById('cityCount').textContent = citiesData.length;
+    document.getElementById('countyCount').textContent = countiesData.length;
     document.getElementById('avgPower').textContent = avgPower.toFixed(1);
-    document.getElementById('bestCity').textContent = `${bestCity.name} (${bestCity.power.toFixed(1)} W/m²)`;
+    document.getElementById('bestCounty').textContent = `${bestCounty.name}, ${bestCounty.state} (${bestCounty.power.toFixed(1)} W/m²)`;
 }
 
 /**
- * Show top 10 cities
+ * Show top 10 counties
  */
-function showTopCities() {
-    const top10 = citiesData.slice(0, 10);
+function showTopCounties() {
+    const top10 = countiesData.slice(0, 10);
 
     const bounds = new maplibregl.LngLatBounds();
-    top10.forEach(city => {
-        bounds.extend([city.lon, city.lat]);
+    top10.forEach(county => {
+        bounds.extend([county.lon, county.lat]);
     });
 
-    map.fitBounds(bounds, { padding: 100, maxZoom: 5 });
+    map.fitBounds(bounds, { padding: 100, maxZoom: 6 });
 
-    markers.forEach(({ element, city }) => {
-        if (element && top10.includes(city)) {
+    markers.forEach(({ element, county }) => {
+        if (element && top10.includes(county)) {
             // Ensure visibility
             element.style.display = 'block';
             element.style.visibility = 'visible';
@@ -425,20 +425,20 @@ function showTopCities() {
         }
     });
 
-    // Show alert with top cities
+    // Show alert with top counties
     setTimeout(() => {
-        const topList = top10.map((c, i) => `${i + 1}. ${c.name}, ${c.country}: ${c.power.toFixed(1)} W/m²`).join('\n');
-        console.log('Top 10 Cities for Evaporation Engines:\n' + topList);
+        const topList = top10.map((c, i) => `${i + 1}. ${c.name}, ${c.state}: ${c.power.toFixed(1)} W/m²`).join('\n');
+        console.log('Top 10 Counties for Evaporation Engines:\n' + topList);
     }, 500);
 }
 
 /**
- * Reset view to global
+ * Reset view to US
  */
 function resetView() {
     map.flyTo({
-        center: [20, 20],
-        zoom: 2,
+        center: [-98, 39],
+        zoom: 4,
         duration: 2000
     });
 }
@@ -449,8 +449,8 @@ function resetView() {
 function toggleHeatmap() {
     heatmapVisible = !heatmapVisible;
 
-    if (map.getLayer('cities-heat')) {
-        map.setLayoutProperty('cities-heat', 'visibility', heatmapVisible ? 'visible' : 'none');
+    if (map.getLayer('counties-heat')) {
+        map.setLayoutProperty('counties-heat', 'visibility', heatmapVisible ? 'visible' : 'none');
     }
 
     // Toggle markers opacity when heatmap is on, but keep them visible

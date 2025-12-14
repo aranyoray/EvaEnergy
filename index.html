@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EvapoScore - Global Capital Cities Evaporation Engine Analysis</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🌍%3C/text%3E%3C/svg%3E">
+    <title>EvapoScore - US Counties Evaporation Engine Analysis</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🇺🇸%3C/text%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css">
     <style>
         * {
@@ -232,12 +232,12 @@
 <body>
     <div class="loading" id="loading">
         <div class="loading-spinner"></div>
-        <p>Loading capital cities data...</p>
+        <p>Loading US counties data...</p>
     </div>
 
     <div class="header">
-        <h1>🌍 EvapoScore: Global Evaporation Engine Feasibility</h1>
-        <p>Interactive visualization of evaporation-driven engine power potential across world capital cities. Based on climate data including temperature, humidity, wind speed, and solar radiation.</p>
+        <h1>🇺🇸 EvapoScore: US Counties Evaporation Engine Feasibility</h1>
+        <p>Interactive visualization of evaporation-driven engine power potential across US counties. Based on climate data including temperature, humidity, wind speed, and solar radiation.</p>
         <div class="header-nav">
             <a href="report.html">📊 Research Report</a>
             <a href="https://github.com/aranyoray/EvapoScore" target="_blank">💻 GitHub</a>
@@ -245,9 +245,9 @@
     </div>
 
     <div class="controls">
-        <button class="control-btn" onclick="showTopCities()">🏆 Top 10 Cities</button>
-        <button class="control-btn" onclick="resetView()">🌐 Reset View</button>
-        <button class="control-btn" onclick="toggleHeatmap()">🗺️ Toggle Heatmap</button>
+        <button class="control-btn" onclick="showTopCounties()">🏆 Top 10 Counties</button>
+        <button class="control-btn" onclick="resetView()">🗺️ Reset View</button>
+        <button class="control-btn" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
     </div>
 
     <div id="map"></div>
@@ -277,15 +277,15 @@
     </div>
 
     <div class="info-panel">
-        <h3>📊 Global Statistics</h3>
-        <p><strong>Cities Analyzed:</strong> <span class="stat-value" id="cityCount">0</span></p>
+        <h3>📊 US Statistics</h3>
+        <p><strong>Counties Analyzed:</strong> <span class="stat-value" id="countyCount">0</span></p>
         <p><strong>Avg Power:</strong> <span class="stat-value" id="avgPower">0</span> W/m²</p>
-        <p><strong>Best Location:</strong> <span id="bestCity">Loading...</span></p>
-        <p style="margin-top: 15px; font-size: 12px; color: #888;">Click on any marker to view detailed analysis</p>
+        <p><strong>Best Location:</strong> <span id="bestCounty">Loading...</span></p>
+        <p style="margin-top: 15px; font-size: 12px; color: #888;">Hover over any marker to view detailed analysis</p>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-    <script src="capitals-data.js"></script>
+    <script src="us-counties-data.js"></script>
     <script src="evaporation-calc.js"></script>
     <script src="map.js"></script>
 </body>
