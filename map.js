@@ -483,5 +483,117 @@ async function fetchWeatherData(lat, lon, startDate, endDate) {
     }
 }
 
+// Global variables for new features
+let currentResolution = 'county'; // 'county' or 'zipcode'
+let currentYear = 2024;
+
+/**
+ * Toggle between county and ZIP code resolution
+ */
+function toggleResolution() {
+    if (currentResolution === 'county') {
+        alert('ZIP code resolution coming soon! This will show ~40,000 ZIP codes across the US.\n\nNote: This requires significant processing and may slow down the browser.');
+        // currentResolution = 'zipcode';
+        // loadZipCodeData();
+    } else {
+        currentResolution = 'county';
+        loadCountiesData();
+    }
+
+    document.getElementById('resolution-badge').textContent =
+        currentResolution === 'county' ? 'County' : 'ZIP Code';
+}
+
+/**
+ * Update map data for a specific year (called by time slider)
+ */
+window.updateMapForYear = async function(year) {
+    currentYear = year;
+    console.log(`Updating map for year ${year}`);
+
+    // Update loading message
+    const loadingEl = document.getElementById('loading');
+    if (loadingEl && loadingEl.style.display === 'none') {
+        loadingEl.style.display = 'block';
+        loadingEl.querySelector('p').textContent = `Loading ${year} data...`;
+    }
+
+    // Simulate fetching historical data
+    // In production, this would fetch from APIs
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Recalculate power for the year
+    // For demo, just add some variation
+    const yearFactor = 1 + ((year - 2020) * 0.02); // Slight trend over time
+    countiesData.forEach(county => {
+        county.powerForYear = county.power * yearFactor * (0.95 + Math.random() * 0.1);
+    });
+
+    // Update markers
+    markers.forEach(({ element, county }) => {
+        const powerFactor = Math.min(county.powerForYear / 100, 2);
+        const size = 12 + (powerFactor * 8);
+        element.style.width = `${size}px`;
+        element.style.height = `${size}px`;
+    });
+
+    // Update statistics
+    const avgPower = countiesData.reduce((sum, c) => sum + (c.powerForYear || c.power), 0) / countiesData.length;
+
+    if (timeSlider) {
+        timeSlider.setYearData(year, {
+            avgDemand: 50000 + (year - 2015) * 2000 + Math.random() * 5000,
+            avgTemp: 15 + Math.random() * 3,
+            avgPower: avgPower
+        });
+    }
+
+    if (loadingEl) {
+        loadingEl.style.display = 'none';
+    }
+
+    // Update data source indicator
+    const dataSourceEl = document.getElementById('data-source');
+    if (dataSourceEl) {
+        dataSourceEl.textContent = dataAPI.noaaToken || dataAPI.eiaToken ? 'Real API Data' : 'Simulated';
+        dataSourceEl.style.color = dataAPI.noaaToken || dataAPI.eiaToken ? '#4CAF50' : '#888';
+    }
+};
+
+/**
+ * Initialize time slider after map loads
+ */
+function initializeTimeSlider() {
+    if (typeof initTimeSlider === 'function') {
+        const slider = initTimeSlider({
+            startYear: 2015,
+            endYear: 2024,
+            currentYear: 2024,
+            onChange: (year) => {
+                window.updateMapForYear(year);
+            }
+        });
+
+        // Initialize data for all years
+        for (let year = 2015; year <= 2024; year++) {
+            const avgPower = countiesData.reduce((sum, c) => sum + c.power, 0) / countiesData.length;
+            slider.setYearData(year, {
+                avgDemand: 50000 + (year - 2015) * 2000 + Math.random() * 5000,
+                avgTemp: 15 + Math.random() * 3,
+                avgPower: avgPower * (1 + ((year - 2020) * 0.02))
+            });
+        }
+
+        return slider;
+    }
+}
+
 // Initialize map when page loads
-window.addEventListener('load', initMap);
+window.addEventListener('load', () => {
+    initMap();
+
+    // Initialize time slider after map loads
+    setTimeout(() => {
+        initializeTimeSlider();
+    }, 2000);
+});

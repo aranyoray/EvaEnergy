@@ -245,9 +245,11 @@
     </div>
 
     <div class="controls">
-        <button class="control-btn" onclick="showTopCounties()">🏆 Top 10 Counties</button>
+        <button class="control-btn" onclick="showTopCounties()">🏆 Top 10 Locations</button>
         <button class="control-btn" onclick="resetView()">🗺️ Reset View</button>
         <button class="control-btn" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
+        <button class="control-btn" onclick="showAPIConfigModal()">🔑 API Keys</button>
+        <button class="control-btn" onclick="toggleResolution()">📍 Toggle Resolution</button>
     </div>
 
     <div id="map"></div>
@@ -277,16 +279,19 @@
     </div>
 
     <div class="info-panel">
-        <h3>📊 US Statistics</h3>
-        <p><strong>Counties Analyzed:</strong> <span class="stat-value" id="countyCount">0</span></p>
+        <h3>📊 US Statistics <span id="resolution-badge" style="font-size: 11px; padding: 3px 8px; background: #667eea; border-radius: 4px; margin-left: 5px;">County</span></h3>
+        <p><strong>Locations:</strong> <span class="stat-value" id="countyCount">0</span></p>
         <p><strong>Avg Power:</strong> <span class="stat-value" id="avgPower">0</span> W/m²</p>
         <p><strong>Best Location:</strong> <span id="bestCounty">Loading...</span></p>
+        <p><strong>Data Source:</strong> <span id="data-source" style="font-size: 11px; color: #888;">Simulated</span></p>
         <p style="margin-top: 15px; font-size: 12px; color: #888;">Hover over any marker to view detailed analysis</p>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="us-counties-data.js"></script>
     <script src="evaporation-calc.js"></script>
+    <script src="api-integration.js"></script>
+    <script src="time-slider.js"></script>
     <script src="map.js"></script>
 </body>
 </html>
