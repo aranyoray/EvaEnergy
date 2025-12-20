@@ -1,10 +1,10 @@
 /**
- * EvaDeficit Page - Supply-Demand Gap Analysis
+ * EvaDeficit - Supply-Demand Gap Choropleth Analysis
+ * Simplified for performance - County boundaries with heatmap
  */
 
-let map, deficitData = [], markers = [];
-let currentYear = 2024;
-let showingFuture = false;
+let map;
+let countiesData = new Map();
 
 const STATE_ABBREV = {
     'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
@@ -24,332 +24,198 @@ function initMap() {
         container: 'map',
         style: 'https://demotiles.maplibre.org/style.json',
         center: [-98, 39],
-        zoom: 4
+        zoom: 4,
+        minZoom: 3,
+        maxZoom: 10,
+        maxBounds: [[-170, 15], [-50, 72]],
+        attributionControl: true
     });
 
-    map.on('load', loadDeficitData);
+    map.on('load', () => {
+        loadCountyData();
+    });
+
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 }
 
-async function loadDeficitData() {
+function getStateCapacity(state) {
+    const stateCode = STATE_ABBREV[state] || state;
+    return US_STATE_ENERGY_CAPACITY[stateCode] || {
+        nuclear: 0, coal: 0, gas: 0, hydro: 0, wind: 0, solar: 0, geothermal: 0, biomass: 0
+    };
+}
+
+async function loadCountyData() {
     const loadingEl = document.getElementById('loading');
 
-    // Track state-level calculations
-    const stateDeficits = {};
+    try {
+        loadingEl.querySelector('p').textContent = 'Loading US county boundaries...';
 
-    for (let i = 0; i < usCounties.length; i++) {
-        const county = usCounties[i];
-        const stateCode = STATE_ABBREV[county.state] || county.state;
+        const response = await fetch('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json');
+        const geojson = await response.json();
 
-        if (i % 50 === 0) {
-            loadingEl.querySelector('p').textContent =
-                `Analyzing ${county.name}, ${county.state} (${i + 1}/${usCounties.length})...`;
-        }
+        loadingEl.querySelector('p').textContent = 'Calculating energy deficit...';
 
-        // Calculate demand (population-based)
-        const demand = county.population * 0.015; // 15 kW per capita
-        const annualDemand = demand * 8760; // MWh per year
+        geojson.features.forEach(feature => {
+            const coords = feature.geometry.type === 'Polygon'
+                ? feature.geometry.coordinates[0][0]
+                : feature.geometry.coordinates[0][0][0];
 
-        // Get state energy balance
-        const balance = getStateEnergyBalance(stateCode);
-        const recommendations = recommendEnergyExpansion(stateCode);
+            const lat = coords[1];
+            const lon = coords[0];
+            const fips = feature.id;
 
-        // Calculate deficit/surplus
-        const selfSufficiency = balance.selfSufficiency || 100;
-        const deficit = balance.surplus < 0 ? Math.abs(balance.surplus) : 0;
-        const surplus = balance.surplus > 0 ? balance.surplus : 0;
+            const countyInfo = usCounties.find(c =>
+                Math.abs(c.lat - lat) < 2 && Math.abs(c.lon - lon) < 2
+            );
 
-        // Store state deficit if not already tracked
-        if (!stateDeficits[stateCode]) {
-            stateDeficits[stateCode] = {
-                state: county.state,
-                stateCode: stateCode,
-                totalDeficit: deficit,
-                totalSurplus: surplus,
-                selfSufficiency: selfSufficiency,
-                balance: balance,
-                recommendations: recommendations || []
-            };
-        }
+            const state = countyInfo ? countyInfo.state : 'Unknown';
+            const population = countyInfo ? countyInfo.population : 50000;
 
-        deficitData.push({
-            ...county,
-            stateCode: stateCode,
-            demand: annualDemand,
-            supply: balance.annualGeneration,
-            deficit: deficit,
-            surplus: surplus,
-            selfSufficiency: selfSufficiency,
-            status: getDeficitStatus(selfSufficiency),
-            stateBalance: balance,
-            recommendations: recommendations || []
+            const demand = population * 0.015;
+            const stateCapacity = getStateCapacity(state);
+            const totalCapacity = Object.values(stateCapacity).reduce((sum, val) => sum + val, 0);
+
+            // Simplified deficit calculation
+            const deficit = demand - (totalCapacity / 100); // Rough estimate
+
+            countiesData.set(fips, {
+                fips,
+                state,
+                demand,
+                supply: totalCapacity / 100,
+                deficit,
+                lat,
+                lon
+            });
+
+            feature.properties.deficit = deficit;
+            feature.properties.state = state;
         });
 
-        await new Promise(resolve => setTimeout(resolve, 2));
-    }
-
-    deficitData.sort((a, b) => b.deficit - a.deficit);
-    loadingEl.style.display = 'none';
-
-    createMarkers();
-    updateStatistics();
-    initializeTimeSlider();
-}
-
-function getDeficitStatus(selfSufficiency) {
-    if (selfSufficiency >= 120) return 'large-surplus';
-    if (selfSufficiency >= 100) return 'balanced';
-    if (selfSufficiency >= 80) return 'small-deficit';
-    if (selfSufficiency >= 60) return 'large-deficit';
-    return 'critical-deficit';
-}
-
-function getDeficitColor(status) {
-    const colors = {
-        'large-surplus': '#27ae60',
-        'balanced': '#95a5a6',
-        'small-deficit': '#f39c12',
-        'large-deficit': '#e74c3c',
-        'critical-deficit': '#c0392b'
-    };
-    return colors[status] || '#95a5a6';
-}
-
-function createMarkers() {
-    deficitData.forEach(loc => {
-        const el = document.createElement('div');
-        const size = 12 + Math.min(Math.abs(100 - loc.selfSufficiency) / 5, 15);
-
-        el.style.width = `${size}px`;
-        el.style.height = `${size}px`;
-        el.style.borderRadius = '50%';
-        el.style.backgroundColor = getDeficitColor(loc.status);
-        el.style.border = '2px solid white';
-        el.style.cursor = 'pointer';
-        el.style.transition = 'all 0.2s ease';
-
-        const popup = new maplibregl.Popup({ offset: 25, maxWidth: '450px' }).setHTML(`
-            <div style="color: #1a1a2e; min-width: 350px;">
-                <h3 style="margin-bottom: 10px; color: ${getDeficitColor(loc.status)};">${loc.name}, ${loc.state}</h3>
-
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 14px;">Energy Balance</h4>
-                    <p style="margin: 3px 0;"><strong>Demand:</strong> ${(loc.demand/1000000).toFixed(2)} GWh/yr</p>
-                    <p style="margin: 3px 0;"><strong>Supply:</strong> ${(loc.supply/1000000).toFixed(2)} GWh/yr</p>
-                    <p style="margin: 3px 0; color: ${loc.deficit > 0 ? '#e74c3c' : '#27ae60'};">
-                        <strong>${loc.deficit > 0 ? 'Deficit' : 'Surplus'}:</strong>
-                        ${(Math.abs(loc.deficit - loc.surplus)/1000000).toFixed(2)} GWh/yr
-                    </p>
-                    <p style="margin: 3px 0;"><strong>Self-Sufficiency:</strong> ${loc.selfSufficiency.toFixed(1)}%</p>
-                </div>
-
-                <div style="background: ${loc.deficit > 0 ? '#fff3cd' : '#d4edda'}; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 14px;">State Capacity</h4>
-                    <p style="margin: 3px 0;"><strong>☢️ Nuclear:</strong> ${(loc.stateBalance.capacity * 0.12).toFixed(0)} MW</p>
-                    <p style="margin: 3px 0;"><strong>🌱 Renewables:</strong> ${(loc.stateBalance.capacity * 0.25).toFixed(0)} MW</p>
-                    <p style="margin: 3px 0;"><strong>⚫ Fossil:</strong> ${(loc.stateBalance.capacity * 0.63).toFixed(0)} MW</p>
-                </div>
-
-                ${loc.recommendations && loc.recommendations.length > 0 ? `
-                    <div style="background: #e3f2fd; padding: 10px; border-radius: 6px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 14px;">💡 Recommendations</h4>
-                        ${loc.recommendations.slice(0, 3).map(rec => `
-                            <p style="margin: 5px 0; font-size: 12px;">
-                                <strong>${rec.source}:</strong> ${rec.reason}
-                                <br><span style="color: #666;">Priority: ${rec.priority} | +${rec.suggestedIncrease.toFixed(0)} MW</span>
-                            </p>
-                        `).join('')}
-                    </div>
-                ` : ''}
-            </div>
-        `);
-
-        el.addEventListener('mouseenter', () => {
-            el.style.transform = 'scale(1.5)';
-            el.style.zIndex = '1000';
-            popup.setLngLat([loc.lon, loc.lat]).addTo(map);
+        map.addSource('counties', {
+            type: 'geojson',
+            data: geojson
         });
 
-        el.addEventListener('mouseleave', () => {
-            el.style.transform = 'scale(1)';
-            el.style.zIndex = '1';
-            setTimeout(() => {
-                if (!popup.getElement()?.matches(':hover')) {
-                    popup.remove();
+        map.addLayer({
+            id: 'counties-fill',
+            type: 'fill',
+            source: 'counties',
+            paint: {
+                'fill-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'deficit'],
+                    -5000, '#2166ac',  // Large surplus (blue)
+                    -1000, '#67a9cf',  // Surplus
+                    0, '#f7f7f7',      // Balanced (white)
+                    1000, '#fddbc7',   // Deficit
+                    5000, '#d73027'    // Critical deficit (red)
+                ],
+                'fill-opacity': 0.7
+            }
+        });
+
+        map.addLayer({
+            id: 'counties-borders',
+            type: 'line',
+            source: 'counties',
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 0.5,
+                'line-opacity': 0.3
+            }
+        });
+
+        let hoveredFips = null;
+
+        map.on('mousemove', 'counties-fill', (e) => {
+            if (e.features.length > 0) {
+                if (hoveredFips !== null) {
+                    map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: false });
                 }
-            }, 300);
+
+                hoveredFips = e.features[0].id;
+                map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: true });
+
+                const feature = e.features[0];
+                const deficit = feature.properties.deficit;
+                const state = feature.properties.state;
+
+                const status = deficit > 1000 ? 'Critical Deficit' :
+                              deficit > 0 ? 'Deficit' :
+                              deficit > -1000 ? 'Balanced' : 'Surplus';
+
+                new maplibregl.Popup({ closeButton: false, closeOnClick: false })
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                    <div style="padding: 8px;">
+                        <strong>${state}</strong><br>
+                        Gap: <span style="color: ${deficit > 0 ? '#d73027' : '#2166ac'}; font-weight: bold;">
+                            ${deficit > 0 ? '+' : ''}${(deficit / 1000).toFixed(1)} GW
+                        </span><br>
+                        <small>${status}</small>
+                    </div>
+                `)
+                .addTo(map);
+            }
         });
 
-        new maplibregl.Marker({ element: el })
-            .setLngLat([loc.lon, loc.lat])
-            .addTo(map);
+        map.on('mouseleave', 'counties-fill', () => {
+            if (hoveredFips !== null) {
+                map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: false });
+            }
+            hoveredFips = null;
+            const popups = document.getElementsByClassName('maplibregl-popup');
+            if (popups.length) popups[0].remove();
+        });
 
-        markers.push({ element: el, location: loc, popup });
-    });
+        map.setPaintProperty('counties-fill', 'fill-opacity', [
+            'case',
+            ['boolean', ['feature-state', 'hover'], false],
+            1,
+            0.7
+        ]);
+
+        loadingEl.style.display = 'none';
+        updateStatistics();
+
+    } catch (error) {
+        console.error('Error:', error);
+        loadingEl.querySelector('p').textContent = 'Error loading data. Please refresh.';
+    }
 }
 
 function updateStatistics() {
-    const deficitStates = deficitData.filter(l => l.deficit > 0);
-    const uniqueDeficitStates = new Set(deficitStates.map(l => l.stateCode)).size;
-    const totalDeficit = deficitData.reduce((sum, l) => sum + l.deficit, 0);
-    const worstDeficit = deficitData[0];
+    const deficits = Array.from(countiesData.values());
+    const deficitCount = deficits.filter(d => d.deficit > 0).length;
+    const totalDeficit = deficits.reduce((sum, d) => d.deficit > 0 ? sum + d.deficit : sum, 0);
+    const worstDeficit = Math.max(...deficits.map(d => d.deficit));
 
-    document.getElementById('deficitCount').textContent = uniqueDeficitStates;
-    document.getElementById('totalDeficit').textContent = `${(totalDeficit/1000000).toFixed(0)} GWh`;
-    document.getElementById('worstDeficit').textContent = `${worstDeficit.state} (${worstDeficit.selfSufficiency.toFixed(0)}%)`;
-
-    const totalRecs = deficitData.reduce((sum, l) => sum + (l.recommendations?.length || 0), 0);
-    document.getElementById('recCount').textContent = totalRecs;
+    document.getElementById('deficitCount').textContent = deficitCount;
+    document.getElementById('totalDeficit').textContent = (totalDeficit / 1000).toFixed(1);
+    document.getElementById('worstDeficit').textContent = (worstDeficit / 1000).toFixed(1);
+    document.getElementById('recommendationCount').textContent = deficitCount;
 }
 
 function showDeficitStates() {
-    markers.forEach(({ element, location }) => {
-        if (location.deficit > 0) {
-            element.style.border = '3px solid #e74c3c';
-            element.style.boxShadow = '0 0 15px rgba(231, 76, 60, 0.8)';
-            element.style.transform = 'scale(1.3)';
-        } else {
-            element.style.opacity = '0.2';
-        }
-    });
-
-    setTimeout(() => {
-        markers.forEach(({ element }) => {
-            element.style.border = '2px solid white';
-            element.style.boxShadow = 'none';
-            element.style.transform = 'scale(1)';
-            element.style.opacity = '1';
-        });
-    }, 5000);
-
-    const deficitCount = deficitData.filter(l => l.deficit > 0).length;
-    alert(`${deficitCount} locations highlighted with energy deficits`);
+    alert('Deficit states are shown in red on the map.');
 }
 
 function showSurplusStates() {
-    markers.forEach(({ element, location }) => {
-        if (location.surplus > 0) {
-            element.style.border = '3px solid #27ae60';
-            element.style.boxShadow = '0 0 15px rgba(39, 174, 96, 0.8)';
-            element.style.transform = 'scale(1.3)';
-        } else {
-            element.style.opacity = '0.2';
-        }
-    });
-
-    setTimeout(() => {
-        markers.forEach(({ element }) => {
-            element.style.border = '2px solid white';
-            element.style.boxShadow = 'none';
-            element.style.transform = 'scale(1)';
-            element.style.opacity = '1';
-        });
-    }, 5000);
-
-    const surplusCount = deficitData.filter(l => l.surplus > 0).length;
-    alert(`${surplusCount} locations highlighted with energy surplus`);
+    alert('Surplus states are shown in blue on the map.');
 }
 
 function showRecommendations() {
-    const statesWithRecs = new Map();
-
-    deficitData.forEach(loc => {
-        if (loc.recommendations && loc.recommendations.length > 0 && !statesWithRecs.has(loc.stateCode)) {
-            statesWithRecs.set(loc.stateCode, {
-                state: loc.state,
-                recommendations: loc.recommendations
-            });
-        }
-    });
-
-    let message = `📊 Energy Expansion Recommendations:\n\n`;
-
-    statesWithRecs.forEach(({ state, recommendations }) => {
-        message += `${state}:\n`;
-        recommendations.slice(0, 2).forEach(rec => {
-            message += `  • ${rec.source}: +${rec.suggestedIncrease.toFixed(0)} MW (${rec.priority} priority)\n`;
-        });
-        message += `\n`;
-    });
-
-    alert(message);
+    alert('Recommendations: States with deficit should expand Nuclear, Solar, Wind, and Geothermal capacity.');
 }
 
-async function toggleFutureProjection() {
-    showingFuture = !showingFuture;
-
-    if (showingFuture) {
-        // Project to 2035 with climate change impact
-        const loadingEl = document.getElementById('loading');
-        loadingEl.style.display = 'block';
-        loadingEl.querySelector('p').textContent = 'Projecting to 2035...';
-
-        for (let i = 0; i < deficitData.length; i++) {
-            const loc = deficitData[i];
-
-            // Fetch climate projection
-            try {
-                const futureClimate = await openMeteoAPI.fetchClimateProjections(
-                    loc.lat, loc.lon,
-                    '2035-01-01', '2035-12-31'
-                );
-
-                // Increase demand due to population growth and warming
-                const growthFactor = 1.20; // 20% growth
-                const climateImpact = futureClimate?.summary ?
-                    (1 + (futureClimate.summary.avgTempMean - 15) * 0.02) : 1.1;
-
-                loc.futureDemand = loc.demand * growthFactor * climateImpact;
-                loc.futureDeficit = Math.max(0, loc.futureDemand - loc.supply);
-                loc.futureSelfSufficiency = (loc.supply / loc.futureDemand) * 100;
-            } catch (error) {
-                console.error('Error projecting:', error);
-                loc.futureDemand = loc.demand * 1.20;
-                loc.futureDeficit = Math.max(0, loc.futureDemand - loc.supply);
-                loc.futureSelfSufficiency = (loc.supply / loc.futureDemand) * 100;
-            }
-
-            if (i % 50 === 0) {
-                loadingEl.querySelector('p').textContent =
-                    `Projecting ${loc.state} (${i+1}/${deficitData.length})...`;
-            }
-        }
-
-        loadingEl.style.display = 'none';
-
-        // Update markers
-        markers.forEach(({ element, location }) => {
-            const futureStatus = getDeficitStatus(location.futureSelfSufficiency);
-            element.style.backgroundColor = getDeficitColor(futureStatus);
-        });
-
-        alert('Now showing 2035 projections with climate impact');
-    } else {
-        // Reset to current
-        markers.forEach(({ element, location }) => {
-            element.style.backgroundColor = getDeficitColor(location.status);
-        });
-        alert('Back to current (2024) data');
-    }
-}
-
-function initializeTimeSlider() {
-    if (typeof initTimeSlider === 'function') {
-        initTimeSlider({
-            startYear: 2015,
-            endYear: 2045,
-            currentYear: 2024,
-            onChange: async (year) => {
-                if (year > 2024) {
-                    showingFuture = true;
-                    await toggleFutureProjection();
-                }
-            }
-        });
-    }
+function showFutureProjection() {
+    alert('Future projection (2035) analysis coming soon.');
 }
 
 window.addEventListener('load', () => {
-    initMap();
     initSharedNavigation('deficit');
+    initMap();
 });

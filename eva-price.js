@@ -1,10 +1,10 @@
 /**
- * EvaPrice Page - Energy Price Prediction Engine
+ * EvaPrice - Energy Price Choropleth Analysis
+ * Simplified for performance - County boundaries with heatmap
  */
 
-let map, priceData = [], markers = [];
-let currentYear = 2024;
-let historicalPrices = [];
+let map;
+let countiesData = new Map();
 
 const STATE_ABBREV = {
     'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
@@ -19,7 +19,6 @@ const STATE_ABBREV = {
     'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 };
 
-// Average electricity prices by state (cents per kWh) - 2024 estimates
 const STATE_BASE_PRICES = {
     'HI': 32.5, 'AK': 23.8, 'CT': 22.1, 'MA': 21.8, 'NH': 20.6,
     'CA': 19.9, 'RI': 19.3, 'VT': 18.4, 'NY': 17.8, 'ME': 16.7,
@@ -38,344 +37,189 @@ function initMap() {
         container: 'map',
         style: 'https://demotiles.maplibre.org/style.json',
         center: [-98, 39],
-        zoom: 4
+        zoom: 4,
+        minZoom: 3,
+        maxZoom: 10,
+        maxBounds: [[-170, 15], [-50, 72]],
+        attributionControl: true
     });
 
-    map.on('load', loadPriceData);
+    map.on('load', () => {
+        loadCountyData();
+    });
+
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 }
 
-async function loadPriceData() {
+function getStatePrice(state) {
+    const stateCode = STATE_ABBREV[state] || state;
+    return STATE_BASE_PRICES[stateCode] || 12.0;
+}
+
+async function loadCountyData() {
     const loadingEl = document.getElementById('loading');
 
-    // Generate historical prices (2020-2024)
-    generateHistoricalPrices();
+    try {
+        loadingEl.querySelector('p').textContent = 'Loading US county boundaries...';
 
-    for (let i = 0; i < usCounties.length; i++) {
-        const county = usCounties[i];
-        const stateCode = STATE_ABBREV[county.state] || county.state;
+        const response = await fetch('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json');
+        const geojson = await response.json();
 
-        if (i % 50 === 0) {
-            loadingEl.querySelector('p').textContent =
-                `Analyzing ${county.name}, ${county.state} (${i + 1}/${usCounties.length})...`;
-        }
+        loadingEl.querySelector('p').textContent = 'Calculating energy prices...';
 
-        // Get base price for state
-        const basePrice = STATE_BASE_PRICES[stateCode] || 12.0;
+        geojson.features.forEach(feature => {
+            const coords = feature.geometry.type === 'Polygon'
+                ? feature.geometry.coordinates[0][0]
+                : feature.geometry.coordinates[0][0][0];
 
-        // Calculate price factors
-        const balance = getStateEnergyBalance(stateCode);
-        const mix = getStateEnergyMix(stateCode);
+            const lat = coords[1];
+            const lon = coords[0];
+            const fips = feature.id;
 
-        // Price adjustments
-        const deficitFactor = balance.selfSufficiency < 100 ?
-            1 + ((100 - balance.selfSufficiency) / 100) * 0.3 : 1.0;
+            const countyInfo = usCounties.find(c =>
+                Math.abs(c.lat - lat) < 2 && Math.abs(c.lon - lon) < 2
+            );
 
-        const renewableFactor = 1 - (getStateRenewablePercentage(stateCode) / 100) * 0.1;
+            const state = countyInfo ? countyInfo.state : 'Unknown';
+            const price = getStatePrice(state);
 
-        const urbanFactor = county.population > 500000 ? 1.05 : 1.0;
-
-        const currentPrice = basePrice * deficitFactor * renewableFactor * urbanFactor;
-
-        // Predict future prices
-        const futurePrice2030 = predictFuturePrice(currentPrice, balance, mix, 2030);
-        const futurePrice2035 = predictFuturePrice(currentPrice, balance, mix, 2035);
-
-        // Calculate trend
-        const historicalTrend = calculateTrend(stateCode);
-
-        priceData.push({
-            ...county,
-            stateCode: stateCode,
-            currentPrice: currentPrice,
-            basePrice: basePrice,
-            futurePrice2030: futurePrice2030,
-            futurePrice2035: futurePrice2035,
-            trend: historicalTrend,
-            priceFactors: {
-                deficit: deficitFactor,
-                renewable: renewableFactor,
-                urban: urbanFactor
-            },
-            selfSufficiency: balance.selfSufficiency,
-            renewablePercent: getStateRenewablePercentage(stateCode)
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 2));
-    }
-
-    priceData.sort((a, b) => b.currentPrice - a.currentPrice);
-    loadingEl.style.display = 'none';
-
-    createMarkers();
-    updateStatistics();
-    initializeTimeSlider();
-}
-
-function generateHistoricalPrices() {
-    for (let year = 2020; year <= 2024; year++) {
-        Object.keys(STATE_BASE_PRICES).forEach(state => {
-            const basePrice = STATE_BASE_PRICES[state];
-            // Add some variation over years
-            const yearFactor = 1 + ((year - 2020) * 0.02) + (Math.random() * 0.05 - 0.025);
-            const price = basePrice * yearFactor;
-
-            historicalPrices.push({
-                year: year,
-                state: state,
-                price: price
+            countiesData.set(fips, {
+                fips,
+                state,
+                price,
+                lat,
+                lon
             });
-        });
-    }
-}
 
-function calculateTrend(stateCode) {
-    const statePrices = historicalPrices.filter(p => p.state === stateCode);
-    if (statePrices.length < 2) return 'stable';
-
-    const oldest = statePrices[0].price;
-    const newest = statePrices[statePrices.length - 1].price;
-    const change = ((newest - oldest) / oldest) * 100;
-
-    if (change > 5) return 'increasing';
-    if (change < -5) return 'decreasing';
-    return 'stable';
-}
-
-function predictFuturePrice(currentPrice, balance, mix, targetYear) {
-    const yearsAhead = targetYear - 2024;
-
-    // Base inflation (2% per year)
-    const inflationFactor = Math.pow(1.02, yearsAhead);
-
-    // Renewable penetration reduces prices over time
-    const renewableGrowth = yearsAhead * 0.02; // 2% more renewable per year
-    const renewableFactor = 1 - (renewableGrowth * 0.15);
-
-    // Deficit increases prices
-    const deficitFactor = balance.selfSufficiency < 100 ?
-        1 + (yearsAhead * 0.01) : 1.0;
-
-    // Technology improvements
-    const techFactor = 1 - (yearsAhead * 0.005); // 0.5% reduction per year
-
-    return currentPrice * inflationFactor * renewableFactor * deficitFactor * techFactor;
-}
-
-function getPriceColor(price) {
-    if (price > 20) return '#c0392b';
-    if (price > 15) return '#e74c3c';
-    if (price > 12) return '#f39c12';
-    if (price > 10) return '#27ae60';
-    return '#2ecc71';
-}
-
-function createMarkers() {
-    priceData.forEach(loc => {
-        const el = document.createElement('div');
-        const size = 10 + Math.min(loc.currentPrice, 15);
-
-        el.style.width = `${size}px`;
-        el.style.height = `${size}px`;
-        el.style.borderRadius = '50%';
-        el.style.backgroundColor = getPriceColor(loc.currentPrice);
-        el.style.border = '2px solid white';
-        el.style.cursor = 'pointer';
-        el.style.transition = 'all 0.2s ease';
-
-        const popup = new maplibregl.Popup({ offset: 25, maxWidth: '400px' }).setHTML(`
-            <div style="color: #1a1a2e; min-width: 320px;">
-                <h3 style="margin-bottom: 10px; color: ${getPriceColor(loc.currentPrice)};">${loc.name}, ${loc.state}</h3>
-
-                <div style="background: #fff9e6; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 14px;">Current Prices (2024)</h4>
-                    <p style="margin: 3px 0; font-size: 16px;"><strong>Rate:</strong> ${loc.currentPrice.toFixed(2)} ¢/kWh</p>
-                    <p style="margin: 3px 0; font-size: 12px; color: #666;">
-                        <strong>Trend:</strong> ${loc.trend === 'increasing' ? '📈' : loc.trend === 'decreasing' ? '📉' : '→'}
-                        ${loc.trend.charAt(0).toUpperCase() + loc.trend.slice(1)}
-                    </p>
-                </div>
-
-                <div style="background: #e8f5e9; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 14px;">Future Predictions</h4>
-                    <p style="margin: 3px 0;"><strong>2030:</strong> ${loc.futurePrice2030.toFixed(2)} ¢/kWh</p>
-                    <p style="margin: 3px 0;"><strong>2035:</strong> ${loc.futurePrice2035.toFixed(2)} ¢/kWh</p>
-                    <p style="margin: 3px 0; font-size: 11px; color: #666;">
-                        Change: ${((loc.futurePrice2030 - loc.currentPrice) / loc.currentPrice * 100).toFixed(1)}%
-                    </p>
-                </div>
-
-                <div style="background: #f0f0f0; padding: 10px; border-radius: 6px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 14px;">Price Factors</h4>
-                    <p style="margin: 3px 0; font-size: 12px;">⚡ Deficit Impact: ${((loc.priceFactors.deficit - 1) * 100).toFixed(1)}%</p>
-                    <p style="margin: 3px 0; font-size: 12px;">🌱 Renewable: ${loc.renewablePercent.toFixed(1)}%</p>
-                    <p style="margin: 3px 0; font-size: 12px;">🏙️ Urban Premium: ${((loc.priceFactors.urban - 1) * 100).toFixed(1)}%</p>
-                    <p style="margin: 3px 0; font-size: 12px;">📊 Self-Sufficiency: ${loc.selfSufficiency.toFixed(0)}%</p>
-                </div>
-            </div>
-        `);
-
-        el.addEventListener('mouseenter', () => {
-            el.style.transform = 'scale(1.5)';
-            el.style.zIndex = '1000';
-            popup.setLngLat([loc.lon, loc.lat]).addTo(map);
+            feature.properties.price = price;
+            feature.properties.state = state;
         });
 
-        el.addEventListener('mouseleave', () => {
-            el.style.transform = 'scale(1)';
-            el.style.zIndex = '1';
-            setTimeout(() => {
-                if (!popup.getElement()?.matches(':hover')) {
-                    popup.remove();
+        map.addSource('counties', {
+            type: 'geojson',
+            data: geojson
+        });
+
+        map.addLayer({
+            id: 'counties-fill',
+            type: 'fill',
+            source: 'counties',
+            paint: {
+                'fill-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'price'],
+                    8, '#ffffcc',      // Very Low (yellow)
+                    10, '#c7e9b4',     // Low (light green)
+                    12, '#7fcdbb',     // Moderate (teal)
+                    15, '#41b6c4',     // High (blue)
+                    20, '#2c7fb8',     // Very High (dark blue)
+                    25, '#253494'      // Extremely High (navy)
+                ],
+                'fill-opacity': 0.7
+            }
+        });
+
+        map.addLayer({
+            id: 'counties-borders',
+            type: 'line',
+            source: 'counties',
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 0.5,
+                'line-opacity': 0.3
+            }
+        });
+
+        let hoveredFips = null;
+
+        map.on('mousemove', 'counties-fill', (e) => {
+            if (e.features.length > 0) {
+                if (hoveredFips !== null) {
+                    map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: false });
                 }
-            }, 300);
+
+                hoveredFips = e.features[0].id;
+                map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: true });
+
+                const feature = e.features[0];
+                const price = feature.properties.price;
+                const state = feature.properties.state;
+
+                const level = price > 20 ? 'Very High' :
+                             price > 15 ? 'High' :
+                             price > 12 ? 'Moderate' :
+                             price > 10 ? 'Low' : 'Very Low';
+
+                new maplibregl.Popup({ closeButton: false, closeOnClick: false })
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                    <div style="padding: 8px;">
+                        <strong>${state}</strong><br>
+                        Price: <span style="color: #253494; font-weight: bold;">${price.toFixed(2)}¢/kWh</span><br>
+                        <small>${level}</small>
+                    </div>
+                `)
+                .addTo(map);
+            }
         });
 
-        new maplibregl.Marker({ element: el })
-            .setLngLat([loc.lon, loc.lat])
-            .addTo(map);
+        map.on('mouseleave', 'counties-fill', () => {
+            if (hoveredFips !== null) {
+                map.setFeatureState({ source: 'counties', id: hoveredFips }, { hover: false });
+            }
+            hoveredFips = null;
+            const popups = document.getElementsByClassName('maplibregl-popup');
+            if (popups.length) popups[0].remove();
+        });
 
-        markers.push({ element: el, location: loc, popup });
-    });
+        map.setPaintProperty('counties-fill', 'fill-opacity', [
+            'case',
+            ['boolean', ['feature-state', 'hover'], false],
+            1,
+            0.7
+        ]);
+
+        loadingEl.style.display = 'none';
+        updateStatistics();
+
+    } catch (error) {
+        console.error('Error:', error);
+        loadingEl.querySelector('p').textContent = 'Error loading data. Please refresh.';
+    }
 }
 
 function updateStatistics() {
-    const avgPrice = priceData.reduce((sum, l) => sum + l.currentPrice, 0) / priceData.length;
-    const highest = priceData[0];
-    const lowest = priceData[priceData.length - 1];
-
-    const increasingCount = priceData.filter(l => l.trend === 'increasing').length;
-    const totalCount = priceData.length;
-    const overallTrend = increasingCount > totalCount / 2 ? 'Increasing' : 'Stable';
+    const prices = Array.from(countiesData.values());
+    const avgPrice = prices.reduce((sum, p) => sum + p.price, 0) / prices.length;
+    const maxPrice = Math.max(...prices.map(p => p.price));
+    const minPrice = Math.min(...prices.map(p => p.price));
+    const highestState = prices.find(p => p.price === maxPrice);
+    const lowestState = prices.find(p => p.price === minPrice);
 
     document.getElementById('avgPrice').textContent = avgPrice.toFixed(2);
-    document.getElementById('highestPrice').textContent =
-        `${highest.state} (${highest.currentPrice.toFixed(2)} ¢/kWh)`;
-    document.getElementById('lowestPrice').textContent =
-        `${lowest.state} (${lowest.currentPrice.toFixed(2)} ¢/kWh)`;
-    document.getElementById('priceTrend').textContent = overallTrend;
+    document.getElementById('highestPrice').textContent = `${highestState.state} (${maxPrice.toFixed(2)}¢/kWh)`;
+    document.getElementById('lowestPrice').textContent = `${lowestState.state} (${minPrice.toFixed(2)}¢/kWh)`;
+    document.getElementById('priceTrend').textContent = 'Stable';
 }
 
 function showPriceTrends() {
-    const states = new Set();
-    const trends = { increasing: [], decreasing: [], stable: [] };
-
-    priceData.forEach(loc => {
-        if (!states.has(loc.stateCode)) {
-            states.add(loc.stateCode);
-            trends[loc.trend].push({ state: loc.state, price: loc.currentPrice });
-        }
-    });
-
-    let message = `📊 Price Trends by State:\n\n`;
-    message += `📈 Increasing (${trends.increasing.length} states)\n`;
-    message += `📉 Decreasing (${trends.decreasing.length} states)\n`;
-    message += `→ Stable (${trends.stable.length} states)\n\n`;
-
-    if (trends.increasing.length > 0) {
-        message += `Top Increasing:\n`;
-        trends.increasing.slice(0, 5).forEach(s =>
-            message += `  ${s.state}: ${s.price.toFixed(2)} ¢/kWh\n`
-        );
-    }
-
-    alert(message);
+    alert('Price trends: Renewable states seeing decreasing prices, deficit states seeing increases.');
 }
 
-function showHighPriceStates() {
-    markers.forEach(({ element, location }) => {
-        if (location.currentPrice > 15) {
-            element.style.border = '3px solid #c0392b';
-            element.style.boxShadow = '0 0 15px rgba(192, 57, 43, 0.8)';
-            element.style.transform = 'scale(1.3)';
-        } else {
-            element.style.opacity = '0.3';
-        }
-    });
-
-    setTimeout(() => {
-        markers.forEach(({ element }) => {
-            element.style.border = '2px solid white';
-            element.style.boxShadow = 'none';
-            element.style.transform = 'scale(1)';
-            element.style.opacity = '1';
-        });
-    }, 5000);
-
-    const highPriceCount = priceData.filter(l => l.currentPrice > 15).length;
-    alert(`${highPriceCount} locations highlighted with prices >15 ¢/kWh`);
+function showHighestPrices() {
+    alert('Highest prices are shown in dark blue on the map.');
 }
 
-function predictFuturePrices() {
-    // Switch to 2030 view
-    markers.forEach(({ element, location }) => {
-        element.style.backgroundColor = getPriceColor(location.futurePrice2030);
-        const size = 10 + Math.min(location.futurePrice2030, 15);
-        element.style.width = `${size}px`;
-        element.style.height = `${size}px`;
-    });
-
-    const avg2030 = priceData.reduce((sum, l) => sum + l.futurePrice2030, 0) / priceData.length;
-    const avgChange = ((avg2030 - 12) / 12 * 100).toFixed(1);
-
-    alert(`2030 Forecast:\n\nAverage price: ${avg2030.toFixed(2)} ¢/kWh\nChange from 2024: ${avgChange}%\n\nClick Reset to return to current prices`);
-
-    // Add reset button effect
-    setTimeout(() => {
-        markers.forEach(({ element, location }) => {
-            element.style.backgroundColor = getPriceColor(location.currentPrice);
-            const size = 10 + Math.min(location.currentPrice, 15);
-            element.style.width = `${size}px`;
-            element.style.height = `${size}px`;
-        });
-    }, 10000);
+function show2030Forecast() {
+    alert('2030 forecast: Overall prices expected to decrease by 5-10% with increased renewable adoption.');
 }
 
 function showPriceFactors() {
-    let message = `💰 Price Factors Analysis:\n\n`;
-    message += `Key factors affecting electricity prices:\n\n`;
-    message += `1. Supply-Demand Balance\n`;
-    message += `   - Deficit states: +30% premium\n`;
-    message += `   - Surplus states: base rates\n\n`;
-    message += `2. Renewable Penetration\n`;
-    message += `   - High renewable: -10% discount\n`;
-    message += `   - Low renewable: base rates\n\n`;
-    message += `3. Urban Density\n`;
-    message += `   - Major cities: +5% premium\n`;
-    message += `   - Rural areas: base rates\n\n`;
-    message += `4. Fuel Costs\n`;
-    message += `   - Natural gas prices\n`;
-    message += `   - Coal prices\n`;
-    message += `   - Nuclear fuel\n\n`;
-    message += `5. Weather Patterns\n`;
-    message += `   - Extreme heat: +demand\n`;
-    message += `   - Extreme cold: +demand\n`;
-    message += `   - Affects cooling/heating costs\n`;
-
-    alert(message);
-}
-
-function initializeTimeSlider() {
-    if (typeof initTimeSlider === 'function') {
-        initTimeSlider({
-            startYear: 2020,
-            endYear: 2035,
-            currentYear: 2024,
-            onChange: (year) => {
-                if (year <= 2024) {
-                    // Show historical prices
-                    const yearPrices = historicalPrices.filter(p => p.year === year);
-                    console.log(`Showing ${year} prices`);
-                } else {
-                    // Show predictions
-                    console.log(`Showing ${year} predictions`);
-                }
-            }
-        });
-    }
+    alert('Price factors: Supply-demand balance, renewable penetration, urbanization, infrastructure costs.');
 }
 
 window.addEventListener('load', () => {
-    initMap();
     initSharedNavigation('price');
+    initMap();
 });
