@@ -15,8 +15,8 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a2e;
-            color: #eee;
+            background: #f5f5f5;
+            color: #333;
         }
 
         #map {
@@ -28,30 +28,28 @@
 
         .header {
             position: absolute;
-            top: 20px;
+            top: 80px;
             left: 20px;
-            right: 20px;
             z-index: 1;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 20px 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(10px);
+            max-width: 400px;
         }
 
         .header h1 {
-            font-size: 28px;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-size: 20px;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 600;
         }
 
         .header p {
-            font-size: 14px;
-            color: #aaa;
-            line-height: 1.6;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.5;
         }
 
         .header-nav {
@@ -81,60 +79,82 @@
             position: absolute;
             bottom: 30px;
             right: 20px;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             z-index: 1;
-            min-width: 220px;
+            min-width: 200px;
             backdrop-filter: blur(10px);
         }
 
         .legend h3 {
-            margin-bottom: 15px;
-            font-size: 16px;
-            color: #fff;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #333;
+            font-weight: 600;
         }
 
         .legend-item {
             display: flex;
             align-items: center;
-            margin-bottom: 10px;
-            font-size: 13px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #666;
         }
 
         .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
+            width: 24px;
+            height: 16px;
+            border-radius: 2px;
             margin-right: 10px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-gradient {
+            width: 24px;
+            height: 200px;
+            border-radius: 4px;
+            margin-right: 10px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            background: linear-gradient(to top, #e8f5e9 0%, #a5d6a7 25%, #66bb6a 50%, #4caf50 75%, #2e7d32 100%);
+        }
+
+        .legend-percentiles {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 200px;
+            margin-left: 35px;
+            font-size: 11px;
+            color: #666;
         }
 
         .info-panel {
             position: absolute;
             bottom: 30px;
             left: 20px;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             z-index: 1;
-            max-width: 300px;
+            max-width: 250px;
             backdrop-filter: blur(10px);
         }
 
         .info-panel h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
-            color: #fff;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #333;
+            font-weight: 600;
         }
 
         .info-panel p {
-            font-size: 13px;
-            color: #bbb;
-            line-height: 1.6;
-            margin-bottom: 8px;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 6px;
         }
 
         .loading {
@@ -196,36 +216,36 @@
 
         .controls {
             position: absolute;
-            top: 140px;
-            left: 20px;
+            top: 80px;
+            left: 440px;
             z-index: 1;
             display: flex;
-            flex-direction: column;
-            gap: 10px;
+            flex-direction: row;
+            gap: 8px;
         }
 
         .control-btn {
-            background: rgba(26, 26, 46, 0.95);
-            border: none;
-            color: #eee;
-            padding: 12px 20px;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ddd;
+            color: #333;
+            padding: 8px 16px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
+            font-size: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
         }
 
         .control-btn:hover {
-            background: #667eea;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            background: #f0f0f0;
+            border-color: #2e7d32;
+            color: #2e7d32;
         }
 
         .stat-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
-            color: #667eea;
+            color: #2e7d32;
         }
     </style>
 </head>
@@ -236,59 +256,42 @@
     </div>
 
     <div class="header">
-        <h1>🇺🇸 EvapoScore: US Counties Evaporation Engine Feasibility</h1>
-        <p>Interactive visualization of evaporation-driven engine power potential across US counties. Based on climate data including temperature, humidity, wind speed, and solar radiation.</p>
-        <div class="header-nav">
-            <a href="report.html">📊 Research Report</a>
-            <a href="https://github.com/aranyoray/EvapoScore" target="_blank">💻 GitHub</a>
-        </div>
+        <h1>EvaDeficit: Energy Supply-Demand Analysis</h1>
+        <p>County-level visualization of energy surplus and deficit across US counties. Areas with surplus shown in darker green (100th percentile), areas with deficit shown in lighter green (0th percentile).</p>
     </div>
 
     <div class="controls">
-        <button class="control-btn" onclick="showTopCounties()">🏆 Top 10 Locations</button>
-        <button class="control-btn" onclick="resetView()">🗺️ Reset View</button>
-        <button class="control-btn" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
-        <button class="control-btn" onclick="showAPIConfigModal()">🔑 API Keys</button>
-        <button class="control-btn" onclick="toggleResolution()">📍 Toggle Resolution</button>
+        <button class="control-btn" onclick="resetView()">Reset View</button>
+        <button class="control-btn" onclick="showAPIConfigModal()">API Keys</button>
     </div>
 
     <div id="map"></div>
 
     <div class="legend">
-        <h3>Power Potential (W/m²)</h3>
-        <div class="legend-item">
-            <div class="legend-color" style="background: #d73027;"></div>
-            <span>Excellent (&gt;200)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: #fc8d59;"></div>
-            <span>Very Good (150-200)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: #fee090;"></div>
-            <span>Good (100-150)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: #91bfdb;"></div>
-            <span>Moderate (50-100)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: #4575b4;"></div>
-            <span>Low (&lt;50)</span>
+        <h3>EvaDeficit Percentile</h3>
+        <div style="display: flex; align-items: flex-start;">
+            <div class="legend-gradient"></div>
+            <div class="legend-percentiles">
+                <div>100th (Max Surplus)</div>
+                <div>75th</div>
+                <div>50th</div>
+                <div>25th</div>
+                <div>0th (Max Deficit)</div>
+            </div>
         </div>
     </div>
 
     <div class="info-panel">
-        <h3>📊 US Statistics <span id="resolution-badge" style="font-size: 11px; padding: 3px 8px; background: #667eea; border-radius: 4px; margin-left: 5px;">County</span></h3>
-        <p><strong>Locations:</strong> <span class="stat-value" id="countyCount">0</span></p>
-        <p><strong>Avg Power:</strong> <span class="stat-value" id="avgPower">0</span> W/m²</p>
-        <p><strong>Best Location:</strong> <span id="bestCounty">Loading...</span></p>
-        <p><strong>Data Source:</strong> <span id="data-source" style="font-size: 11px; color: #888;">Simulated</span></p>
-        <p style="margin-top: 15px; font-size: 12px; color: #888;">Hover over any marker to view detailed analysis</p>
+        <h3>Statistics</h3>
+        <p><strong>Counties:</strong> <span class="stat-value" id="countyCount">0</span></p>
+        <p><strong>Avg Self-Sufficiency:</strong> <span class="stat-value" id="avgSelfSufficiency">0</span>%</p>
+        <p><strong>Best Surplus:</strong> <span id="bestCounty">Loading...</span></p>
+        <p style="margin-top: 10px; font-size: 11px; color: #999;">Click counties for details</p>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="us-counties-data.js"></script>
+    <script src="energy-capacity-data.js"></script>
     <script src="evaporation-calc.js"></script>
     <script src="api-integration.js"></script>
     <script src="time-slider.js"></script>

@@ -35,13 +35,13 @@ class TimeSlider {
         sliderContainer.id = 'time-slider-container';
         sliderContainer.style.cssText = `
             position: absolute;
-            bottom: 100px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(26, 26, 46, 0.95);
-            padding: 20px 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             z-index: 1000;
             min-width: 600px;
             backdrop-filter: blur(10px);
@@ -49,35 +49,32 @@ class TimeSlider {
 
         sliderContainer.innerHTML = `
             <div style="margin-bottom: 15px; text-align: center;">
-                <h3 style="margin: 0 0 10px 0; color: #fff; font-size: 16px;">
-                    📅 Historical Data: <span id="current-year-display" style="color: #667eea;">${this.currentYear}</span>
+                <h3 style="margin: 0 0 8px 0; color: #333; font-size: 14px; font-weight: 600;">
+                    Year: <span id="current-year-display" style="color: #2e7d32;">${this.currentYear}</span>
                 </h3>
-                <p style="margin: 0; font-size: 12px; color: #aaa;">
-                    Electricity demand and climate data from ${this.startYear} to ${this.endYear}
+                <p style="margin: 0; font-size: 11px; color: #666;">
+                    ${this.startYear} - ${this.endYear}
                 </p>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                <span style="color: #aaa; font-size: 14px;">${this.startYear}</span>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <span style="color: #666; font-size: 12px;">${this.startYear}</span>
                 <input type="range" id="year-slider"
                        min="${this.startYear}"
                        max="${this.endYear}"
                        value="${this.currentYear}"
                        step="1"
-                       style="flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(to right, #4575b4, #667eea, #d73027); outline: none; -webkit-appearance: none;">
-                <span style="color: #aaa; font-size: 14px;">${this.endYear}</span>
+                       style="flex: 1; height: 4px; border-radius: 2px; background: linear-gradient(to right, #e8f5e9, #a5d6a7, #66bb6a, #4caf50, #2e7d32); outline: none; -webkit-appearance: none;">
+                <span style="color: #666; font-size: 12px;">${this.endYear}</span>
             </div>
 
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="play-pause-btn" style="padding: 8px 16px; background: #667eea; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 5px;">
+            <div style="display: flex; gap: 8px; justify-content: center;">
+                <button id="play-pause-btn" style="padding: 6px 12px; background: #2e7d32; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;">
                     <span id="play-icon">▶</span>
                     <span id="play-text">Play</span>
                 </button>
-                <button id="reset-btn" style="padding: 8px 16px; background: #444; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px;">
-                    ↻ Reset
-                </button>
-                <button id="compare-btn" style="padding: 8px 16px; background: #444; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px;">
-                    📊 Compare Years
+                <button id="reset-btn" style="padding: 6px 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; color: #333; cursor: pointer; font-size: 12px;">
+                    Reset
                 </button>
             </div>
 
@@ -106,22 +103,22 @@ class TimeSlider {
             #year-slider::-webkit-slider-thumb {
                 -webkit-appearance: none;
                 appearance: none;
-                width: 20px;
-                height: 20px;
+                width: 16px;
+                height: 16px;
                 border-radius: 50%;
-                background: #667eea;
+                background: #2e7d32;
                 cursor: pointer;
-                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+                box-shadow: 0 1px 4px rgba(46, 125, 50, 0.4);
             }
 
             #year-slider::-moz-range-thumb {
-                width: 20px;
-                height: 20px;
+                width: 16px;
+                height: 16px;
                 border-radius: 50%;
-                background: #667eea;
+                background: #2e7d32;
                 cursor: pointer;
                 border: none;
-                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+                box-shadow: 0 1px 4px rgba(46, 125, 50, 0.4);
             }
 
             #play-pause-btn:hover, #reset-btn:hover, #compare-btn:hover {

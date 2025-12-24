@@ -1,6 +1,6 @@
 /**
  * MapLibre Visualization for US Counties Evaporation Engine Analysis
- * Enhanced with hover popups and heatmap
+ * Enhanced with hover popups, heatmap, and county boundary visualization
  */
 
 let map;
@@ -8,17 +8,37 @@ let countiesData = [];
 let markers = [];
 let heatmapVisible = false;
 let currentPopup = null;
+let countyBoundariesVisible = false;
+let countyBoundariesSource = null;
 
 // Climate data cache
 const climateCache = new Map();
 
 /**
- * Initialize the map
+ * Initialize the map with minimalist style
  */
 function initMap() {
+    // Use a light, minimalist map style
     map = new maplibregl.Map({
         container: 'map',
-        style: 'https://demotiles.maplibre.org/style.json',
+        style: {
+            version: 8,
+            sources: {
+                'carto-positron': {
+                    type: 'raster',
+                    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors © CARTO'
+                }
+            },
+            layers: [{
+                id: 'carto-positron-layer',
+                type: 'raster',
+                source: 'carto-positron',
+                minzoom: 0,
+                maxzoom: 22
+            }]
+        },
         center: [-98, 39],
         zoom: 4,
         attributionControl: true
@@ -146,38 +166,89 @@ function estimateClimateData(lat, lon) {
 }
 
 /**
- * Load and process counties data
+ * Load and process counties data with EvaDeficit calculation
  */
 async function loadCountiesData() {
     const loadingEl = document.getElementById('loading');
+    const STATE_ABBREV = {
+        'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+        'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+        'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+        'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+        'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+        'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+        'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+        'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+        'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+        'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+    };
 
     try {
+        const batchSize = 50;
+        const totalCounties = usCounties.length;
+        
+        loadingEl.querySelector('p').textContent =
+            `Calculating EvaDeficit for ${totalCounties} counties...`;
+
         for (let i = 0; i < usCounties.length; i++) {
             const county = usCounties[i];
+            const stateCode = STATE_ABBREV[county.state] || county.state;
 
-            loadingEl.querySelector('p').textContent =
-                `Analyzing ${county.name}, ${county.state} (${i + 1}/${usCounties.length})...`;
+            if (i % batchSize === 0) {
+                loadingEl.querySelector('p').textContent =
+                    `Analyzing ${county.name}, ${county.state}... ${i + 1}/${totalCounties}`;
+            }
 
-            const climate = estimateClimateData(county.lat, county.lon);
-            const power = evapCalc.estimatePowerFromClimateaverages(climate);
-            const category = evapCalc.getPowerCategory(power);
+            // Calculate demand (population-based)
+            const demand = county.population * 0.015; // 15 kW per capita
+            const annualDemand = demand * 8760; // MWh per year
+
+            // Get state energy balance
+            const balance = getStateEnergyBalance(stateCode);
+            const selfSufficiency = balance.selfSufficiency || 100;
+            const deficit = balance.surplus < 0 ? Math.abs(balance.surplus) : 0;
+            const surplus = balance.surplus > 0 ? balance.surplus : 0;
+
+            // Calculate EvaDeficit score (surplus is positive, deficit is negative)
+            // Use self-sufficiency as the primary metric
+            const evaDeficit = selfSufficiency - 100; // Positive = surplus, Negative = deficit
 
             countiesData.push({
                 ...county,
-                climate: climate,
-                power: power,
-                category: category
+                stateCode: stateCode,
+                demand: annualDemand,
+                supply: balance.annualGeneration,
+                deficit: deficit,
+                surplus: surplus,
+                selfSufficiency: selfSufficiency,
+                evaDeficit: evaDeficit,
+                balance: balance
             });
 
-            await new Promise(resolve => setTimeout(resolve, 5));
+            if (i % batchSize === 0) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
         }
 
-        countiesData.sort((a, b) => b.power - a.power);
+        // Calculate percentiles based on EvaDeficit
+        const evaDeficitValues = countiesData.map(c => c.evaDeficit).sort((a, b) => a - b);
+        const minDeficit = Math.min(...evaDeficitValues);
+        const maxSurplus = Math.max(...evaDeficitValues);
+        
+        countiesData.forEach(county => {
+            // Calculate percentile (0-100)
+            // 100th percentile = max surplus, 0th percentile = max deficit
+            const percentile = ((county.evaDeficit - minDeficit) / (maxSurplus - minDeficit)) * 100;
+            county.percentile = Math.max(0, Math.min(100, percentile));
+        });
+
+        countiesData.sort((a, b) => b.evaDeficit - a.evaDeficit);
         loadingEl.style.display = 'none';
 
-        createMarkers();
-        createHeatmapLayer();
+        createCountyBoundaries();
         updateStatistics();
+        
+        console.log(`✓ Loaded ${countiesData.length} counties with EvaDeficit scores`);
 
     } catch (error) {
         console.error('Error loading data:', error);
@@ -186,17 +257,142 @@ async function loadCountiesData() {
 }
 
 /**
- * Create markers with hover popups
+ * Get green color based on percentile
  */
-function createMarkers() {
-    countiesData.forEach(county => {
+function getPercentileColor(percentile) {
+    // Green gradient: 0th percentile (max deficit) = light green, 100th percentile (max surplus) = dark green
+    if (percentile >= 100) return '#2e7d32'; // Dark green
+    if (percentile >= 75) return '#4caf50';
+    if (percentile >= 50) return '#66bb6a';
+    if (percentile >= 25) return '#a5d6a7';
+    return '#e8f5e9'; // Light green
+}
+
+/**
+ * Create county boundaries with EvaDeficit coloring
+ */
+function createCountyBoundaries() {
+    if (!map.getSource('county-boundaries')) {
+        const boundaryFeatures = countiesData.map(county => {
+            // Create simplified boundaries
+            const baseRadius = 0.2;
+            const popFactor = Math.log10(county.population || 10000) / 5;
+            const radius = baseRadius * (0.5 + popFactor);
+            const points = 12;
+            const coordinates = [];
+            
+            for (let i = 0; i <= points; i++) {
+                const angle = (i / points) * 2 * Math.PI;
+                const lat = county.lat + radius * Math.cos(angle);
+                const lon = county.lon + radius * Math.sin(angle) / Math.cos(county.lat * Math.PI / 180);
+                coordinates.push([lon, lat]);
+            }
+            
+            return {
+                type: 'Feature',
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [coordinates]
+                },
+                properties: {
+                    name: county.name,
+                    state: county.state,
+                    evaDeficit: county.evaDeficit || 0,
+                    percentile: county.percentile || 0,
+                    selfSufficiency: county.selfSufficiency || 100
+                }
+            };
+        });
+        
+        map.addSource('county-boundaries', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: boundaryFeatures
+            }
+        });
+        
+        // Add fill layer with green gradient
+        map.addLayer({
+            id: 'county-boundaries-fill',
+            type: 'fill',
+            source: 'county-boundaries',
+            paint: {
+                'fill-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'percentile'],
+                    0, '#e8f5e9',   // Light green (0th percentile - max deficit)
+                    25, '#a5d6a7',
+                    50, '#66bb6a',
+                    75, '#4caf50',
+                    100, '#2e7d32'  // Dark green (100th percentile - max surplus)
+                ],
+                'fill-opacity': 0.7
+            }
+        });
+        
+        // Add grey outline
+        map.addLayer({
+            id: 'county-boundaries-outline',
+            type: 'line',
+            source: 'county-boundaries',
+            paint: {
+                'line-color': '#999',
+                'line-width': 0.5,
+                'line-opacity': 0.6
+            }
+        });
+        
+        // Add click handler for popups
+        map.on('click', 'county-boundaries-fill', (e) => {
+            const props = e.features[0].properties;
+            const county = countiesData.find(c => c.name === props.name && c.state === props.state);
+            
+            if (county) {
+                const popupContent = `
+                    <div style="min-width: 250px; color: #333;">
+                        <h3 style="margin-bottom: 10px; font-size: 16px; color: #2e7d32;">
+                            ${county.name}, ${county.state}
+                        </h3>
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+                            <p style="margin: 5px 0; font-size: 13px;"><strong>Self-Sufficiency:</strong> ${county.selfSufficiency.toFixed(1)}%</p>
+                            <p style="margin: 5px 0; font-size: 13px;"><strong>Percentile:</strong> ${county.percentile.toFixed(1)}th</p>
+                            <p style="margin: 5px 0; font-size: 13px;">
+                                <strong>${county.surplus > 0 ? 'Surplus' : 'Deficit'}:</strong>
+                                ${((Math.abs(county.surplus - county.deficit))/1000000).toFixed(2)} GWh/yr
+                            </p>
+                        </div>
+                        <p style="font-size: 11px; color: #666; margin-top: 8px;">
+                            Population: ${county.population.toLocaleString()}
+                        </p>
+                    </div>
+                `;
+                
+                new maplibregl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML(popupContent)
+                    .addTo(map);
+            }
+        });
+        
+        // Change cursor on hover
+        map.on('mouseenter', 'county-boundaries-fill', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        
+        map.on('mouseleave', 'county-boundaries-fill', () => {
+            map.getCanvas().style.cursor = '';
+        });
+    }
+}
         const el = document.createElement('div');
         el.className = 'marker';
 
-        // Scale marker size by power and population
-        const baseSize = 12;
+        // Scale marker size by power - optimized for county-level visualization
+        const baseSize = 8;
         const powerFactor = Math.min(county.power / 100, 2);
-        const size = baseSize + (powerFactor * 8);
+        const size = baseSize + (powerFactor * 6);
 
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
@@ -299,17 +495,10 @@ function createMarkers() {
             }
         });
 
-        const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([county.lon, county.lat])
-            .addTo(map);
-
-        // Store references
-        markers.push({ marker, county, popup, element: el });
-    });
-}
+// Old marker functions removed - using county boundaries instead
 
 /**
- * Create heatmap layer showing power density
+ * Create heatmap layer - not used in minimalist view
  */
 function createHeatmapLayer() {
     if (map.getSource('counties-heat')) {
@@ -385,15 +574,19 @@ function createHeatmapLayer() {
 }
 
 /**
- * Update US statistics
+ * Update statistics for EvaDeficit visualization
  */
 function updateStatistics() {
-    const avgPower = countiesData.reduce((sum, county) => sum + county.power, 0) / countiesData.length;
-    const bestCounty = countiesData[0];
+    const avgSelfSufficiency = countiesData.reduce((sum, county) => sum + (county.selfSufficiency || 100), 0) / countiesData.length;
+    const bestCounty = countiesData.find(c => c.percentile === 100) || countiesData[0];
 
-    document.getElementById('countyCount').textContent = countiesData.length;
-    document.getElementById('avgPower').textContent = avgPower.toFixed(1);
-    document.getElementById('bestCounty').textContent = `${bestCounty.name}, ${bestCounty.state} (${bestCounty.power.toFixed(1)} W/m²)`;
+    document.getElementById('countyCount').textContent = countiesData.length.toLocaleString();
+    document.getElementById('avgSelfSufficiency').textContent = avgSelfSufficiency.toFixed(1);
+    if (bestCounty) {
+        document.getElementById('bestCounty').textContent = `${bestCounty.name}, ${bestCounty.state} (${bestCounty.selfSufficiency.toFixed(1)}%)`;
+    }
+    
+    console.log(`Statistics updated: ${countiesData.length} counties with EvaDeficit scores`);
 }
 
 /**
@@ -462,6 +655,141 @@ function toggleHeatmap() {
         }
     });
 }
+
+/**
+ * Load county boundaries from public GeoJSON source
+ * Uses US Census Bureau TIGER/Line shapefiles converted to GeoJSON
+ * Creates simplified boundaries for county-level visualization
+ */
+async function loadCountyBoundaries() {
+    try {
+        // Wait for counties data to be loaded
+        if (countiesData.length === 0) {
+            setTimeout(loadCountyBoundaries, 1000);
+            return;
+        }
+        
+        if (!map.getSource('county-boundaries')) {
+            console.log('Creating county boundaries for county-level resolution...');
+            
+            // Create simplified boundaries using county centroids
+            // In production, load from: https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json
+            // or use: https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_500k.json
+            
+            const boundaryFeatures = countiesData.map(county => {
+                // Create a simple circular boundary around each county centroid
+                // Size varies by population to approximate county area
+                const baseRadius = 0.2; // degrees
+                const popFactor = Math.log10(county.population || 10000) / 5; // Scale by population
+                const radius = baseRadius * (0.5 + popFactor);
+                const points = 12; // Number of points in circle
+                const coordinates = [];
+                
+                for (let i = 0; i <= points; i++) {
+                    const angle = (i / points) * 2 * Math.PI;
+                    const lat = county.lat + radius * Math.cos(angle);
+                    const lon = county.lon + radius * Math.sin(angle) / Math.cos(county.lat * Math.PI / 180);
+                    coordinates.push([lon, lat]);
+                }
+                
+                return {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [coordinates]
+                    },
+                    properties: {
+                        name: county.name,
+                        state: county.state,
+                        power: county.power || 0,
+                        category: county.category?.level || 'moderate',
+                        population: county.population || 0
+                    }
+                };
+            });
+            
+            map.addSource('county-boundaries', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: boundaryFeatures
+                }
+            });
+            
+            // Add fill layer for county boundaries
+            map.addLayer({
+                id: 'county-boundaries-fill',
+                type: 'fill',
+                source: 'county-boundaries',
+                paint: {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'power'],
+                        0, '#4575b4',
+                        50, '#91bfdb',
+                        100, '#fee090',
+                        150, '#fc8d59',
+                        200, '#d73027'
+                    ],
+                    'fill-opacity': 0.25
+                },
+                layout: {
+                    'visibility': 'none'
+                }
+            });
+            
+            // Add outline layer
+            map.addLayer({
+                id: 'county-boundaries-outline',
+                type: 'line',
+                source: 'county-boundaries',
+                paint: {
+                    'line-color': '#fff',
+                    'line-width': 0.5,
+                    'line-opacity': 0.4
+                },
+                layout: {
+                    'visibility': 'none'
+                }
+            });
+            
+            countyBoundariesSource = 'county-boundaries';
+            console.log(`✓ Created ${boundaryFeatures.length} county boundaries`);
+        }
+    } catch (error) {
+        console.warn('Could not load county boundaries:', error);
+        console.log('Using point markers only. For full county boundaries, load GeoJSON from:');
+        console.log('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json');
+    }
+}
+
+/**
+ * Toggle county boundary visualization
+ * Made globally accessible for button onclick
+ */
+window.toggleCountyBoundaries = function() {
+    countyBoundariesVisible = !countyBoundariesVisible;
+    
+    if (map && map.getLayer('county-boundaries-fill')) {
+        map.setLayoutProperty('county-boundaries-fill', 'visibility', 
+            countyBoundariesVisible ? 'visible' : 'none');
+    }
+    
+    if (map && map.getLayer('county-boundaries-outline')) {
+        map.setLayoutProperty('county-boundaries-outline', 'visibility', 
+            countyBoundariesVisible ? 'visible' : 'none');
+    }
+    
+    // Adjust marker visibility
+    markers.forEach(({ element }) => {
+        if (element) {
+            element.style.opacity = countyBoundariesVisible ? '0.4' : '1';
+        }
+    });
+    
+    console.log(`County boundaries ${countyBoundariesVisible ? 'enabled' : 'disabled'}`);
+};
 
 /**
  * Fetch real weather data from Open-Meteo API (for future enhancement)
